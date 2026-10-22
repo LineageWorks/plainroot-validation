@@ -245,6 +245,14 @@ parameters per issue, and 1 MiB of aggregate field/name/text bytes. Hard limits
 are 256 issues, 16 parameters per issue, and 16 MiB of aggregate text bytes;
 callers may lower limits when creating a report.
 
+All public C enum types have an asserted 32-bit representation. This lets the
+API reject unknown values with a status instead of triggering undefined enum
+loads in C++ implementations. The release ABI test compares exported function
+symbols with both the public header and the frozen
+`PLAINROOT_VALIDATION_0.1` symbol manifest; removing or renaming a v1 symbol
+requires an explicit ABI version decision. C compilation tests also freeze the
+public structure sizes and key field offsets for the 64-bit ABI.
+
 ## State, forms, and Lua
 
 `plainroot-state` remains independent. Its per-update check callback can call

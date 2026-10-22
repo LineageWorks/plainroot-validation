@@ -22,7 +22,13 @@ extern "C" {
 #define PLAINROOT_VALIDATION_MAXIMUM_PATTERN_BYTES (64u * 1024u)
 #define PLAINROOT_VALIDATION_REGEX_MAXIMUM_MEMORY_BYTES (8u * 1024u * 1024u)
 
-typedef enum plainroot_validation_result_v1 {
+#ifdef __cplusplus
+#define PLAINROOT_VALIDATION_ENUM(name) enum name : int32_t
+#else
+#define PLAINROOT_VALIDATION_ENUM(name) enum name
+#endif
+
+typedef PLAINROOT_VALIDATION_ENUM(plainroot_validation_result_v1) {
   PLAINROOT_VALIDATION_OK = 0,
   PLAINROOT_VALIDATION_INVALID_ARGUMENT = 1,
   PLAINROOT_VALIDATION_OUT_OF_MEMORY = 2,
@@ -37,7 +43,7 @@ typedef enum plainroot_validation_result_v1 {
   PLAINROOT_VALIDATION_NOT_SEALED = 11,
 } plainroot_validation_result_v1;
 
-typedef enum plainroot_validation_issue_code_v1 {
+typedef PLAINROOT_VALIDATION_ENUM(plainroot_validation_issue_code_v1) {
   PLAINROOT_VALIDATION_ISSUE_NONE = 0,
   PLAINROOT_VALIDATION_ISSUE_REQUIRED = 1,
   PLAINROOT_VALIDATION_ISSUE_INVALID_UTF8 = 2,
@@ -54,7 +60,7 @@ typedef enum plainroot_validation_issue_code_v1 {
   PLAINROOT_VALIDATION_ISSUE_BLANK = 13,
 } plainroot_validation_issue_code_v1;
 
-typedef enum plainroot_validation_parameter_type_v1 {
+typedef PLAINROOT_VALIDATION_ENUM(plainroot_validation_parameter_type_v1) {
   PLAINROOT_VALIDATION_PARAMETER_BOOL = 1,
   PLAINROOT_VALIDATION_PARAMETER_I64 = 2,
   PLAINROOT_VALIDATION_PARAMETER_U64 = 3,
@@ -176,10 +182,33 @@ typedef struct plainroot_validation_pattern_options_v1 {
   uint32_t maximum_pattern_bytes;
 } plainroot_validation_pattern_options_v1;
 
-typedef enum plainroot_validation_pattern_match_mode_v1 {
+typedef PLAINROOT_VALIDATION_ENUM(plainroot_validation_pattern_match_mode_v1) {
   PLAINROOT_VALIDATION_PATTERN_PARTIAL = 0,
   PLAINROOT_VALIDATION_PATTERN_FULL = 1,
 } plainroot_validation_pattern_match_mode_v1;
+
+#undef PLAINROOT_VALIDATION_ENUM
+
+/* Keep enum layout fixed for the public C ABI and unknown-value checks. */
+#ifdef __cplusplus
+static_assert(sizeof(plainroot_validation_result_v1) == sizeof(int32_t));
+static_assert(sizeof(plainroot_validation_issue_code_v1) == sizeof(int32_t));
+static_assert(sizeof(plainroot_validation_parameter_type_v1) ==
+              sizeof(int32_t));
+static_assert(sizeof(plainroot_validation_pattern_match_mode_v1) ==
+              sizeof(int32_t));
+#else
+_Static_assert(sizeof(plainroot_validation_result_v1) == sizeof(int32_t),
+               "validation result enum must use the 32-bit ABI");
+_Static_assert(sizeof(plainroot_validation_issue_code_v1) == sizeof(int32_t),
+               "validation issue enum must use the 32-bit ABI");
+_Static_assert(sizeof(plainroot_validation_parameter_type_v1) ==
+                   sizeof(int32_t),
+               "validation parameter enum must use the 32-bit ABI");
+_Static_assert(sizeof(plainroot_validation_pattern_match_mode_v1) ==
+                   sizeof(int32_t),
+               "validation match-mode enum must use the 32-bit ABI");
+#endif
 
 PLAINROOT_VALIDATION_API uint32_t
 plainroot_validation_abi_version_v1(void);

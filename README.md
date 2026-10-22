@@ -61,6 +61,49 @@ stable parse issue code. The CLI is installed as
 and `plainroot-state`; the validation library's own Meson project has no state
 dependency and remains buildable on its own.
 
+## Release hardening
+
+The normal Meson suite compares versioned ELF exports against the public C
+header and the frozen ABI 0.1 symbol manifest, compiles C struct-layout
+assertions for the 64-bit ABI, and checks forbidden runtime dependencies. It
+then stages an install under a temporary directory and builds independent C
+and C++ consumers using only the installed headers and pkg-config metadata. It
+does not write to the system prefix. The install test also verifies that RE2 is
+recorded as a private pkg-config dependency.
+
+Run the library suite under AddressSanitizer and UBSan with Clang:
+
+```sh
+CC=clang CXX=clang++ meson setup build-asan . \
+  -Dlua_adapter=disabled -Db_sanitize=address,undefined -Db_lundef=false
+ASAN_OPTIONS=detect_leaks=0 meson test -C build-asan \
+  --no-suite packaging --print-errorlogs
+```
+
+LeakSanitizer is disabled here because the current test runner uses ptrace,
+which its leak checker does not support. AddressSanitizer and UBSan remain
+enabled; run without `detect_leaks=0` in a non-ptraced environment to include
+leak checking.
+
+Opt-in libFuzzer targets exercise numeric parsing, UTF-8 text validation, and
+bounded RE2 pattern compilation and matching. The Meson test suite runs a short
+smoke pass for each target; longer runs can be started directly:
+
+```sh
+CC=clang CXX=clang++ meson setup build-fuzz . \
+  -Dlua_adapter=disabled -Dfuzzing=enabled
+meson test -C build-fuzz --print-errorlogs
+ASAN_OPTIONS=detect_leaks=0 build-fuzz/plainroot-validation-numeric-fuzz \
+  -max_len=4096 -runs=100000
+ASAN_OPTIONS=detect_leaks=0 build-fuzz/plainroot-validation-text-utf8-regex-fuzz \
+  -max_len=4096 -runs=100000
+```
+
+Fuzz targets are disabled in normal builds. Their parser input is capped at
+4 KiB, regex patterns at 2 KiB, and RE2 retains its configured compiled-program
+budget. Clang with libFuzzer, AddressSanitizer, and UBSan is required to enable
+them.
+
 ## Optional Lua adapter
 
 When enabled, Meson installs `plainroot_validation.so` under
@@ -123,6 +166,12 @@ Callers own localization and presentation. The library returns machine-readable
 codes and typed parameters, not translated messages. Parsing, validation, and
 normalization are separate operations; validators never silently transform
 input.
+
+Applications should map stable issue codes to their own localized catalog
+messages and format named typed parameters with locale-aware number formatting.
+Keep field identifiers separate from translated labels, and do not present
+internal diagnostic text as user-facing copy. Validation results describe
+input correctness; they do not escape or encode values for an output context.
 
 ## Numeric parsing example
 

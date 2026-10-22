@@ -4,3 +4,9 @@ option(
   value: 'auto',
   description: 'Build the optional Lua 5.4 validation adapter',
 )
+option(
+  'fuzzing',
+  type: 'feature',
+  value: 'disabled',
+  description: 'Build Clang libFuzzer targets with ASan and UBSan',
+)

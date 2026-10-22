@@ -15,9 +15,39 @@
 
 int main(void) {
   CHECK(plainroot_validation_abi_version_v1() == 1);
+  CHECK(strcmp(plainroot_validation_result_name_v1((int32_t)99),
+               "unknown-result") == 0);
+  CHECK(strcmp(plainroot_validation_issue_code_name_v1((int32_t)99),
+               "unknown-issue") == 0);
   CHECK(strcmp(plainroot_validation_issue_code_name_v1(
                    PLAINROOT_VALIDATION_ISSUE_OUT_OF_RANGE),
                "out-of-range") == 0);
+
+  plainroot_validation_issue_v1 invalid_issue = {0};
+  invalid_issue.struct_size = sizeof(invalid_issue);
+  invalid_issue.code = (plainroot_validation_issue_code_v1)99;
+  plainroot_validation_report *invalid_code_report = NULL;
+  CHECK(plainroot_validation_report_create_v1(NULL, &invalid_code_report) ==
+        PLAINROOT_VALIDATION_OK);
+  CHECK(plainroot_validation_report_add_issue_v1(
+            invalid_code_report, &invalid_issue) ==
+        PLAINROOT_VALIDATION_INVALID_ISSUE_CODE);
+  plainroot_validation_report_release_v1(invalid_code_report);
+
+  plainroot_validation_parameter_v1 invalid_parameter = {0};
+  invalid_parameter.struct_size = sizeof(invalid_parameter);
+  invalid_parameter.name = "unknown";
+  invalid_parameter.name_size = sizeof("unknown") - 1;
+  invalid_parameter.type = (plainroot_validation_parameter_type_v1)99;
+  invalid_issue.code = PLAINROOT_VALIDATION_ISSUE_REQUIRED;
+  invalid_issue.parameters = &invalid_parameter;
+  invalid_issue.parameter_count = 1;
+  CHECK(plainroot_validation_report_create_v1(NULL, &invalid_code_report) ==
+        PLAINROOT_VALIDATION_OK);
+  CHECK(plainroot_validation_report_add_issue_v1(
+            invalid_code_report, &invalid_issue) ==
+        PLAINROOT_VALIDATION_INVALID_ARGUMENT);
+  plainroot_validation_report_release_v1(invalid_code_report);
 
   plainroot_validation_report *report = NULL;
   CHECK(plainroot_validation_report_create_v1(NULL, &report) ==

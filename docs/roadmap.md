@@ -139,18 +139,33 @@ input strings are treated as data rather than executed code. The full project
 suite passes with the adapter enabled; a separate core-only build passes with
 `-Dlua_adapter=disabled`.
 
-### 7. Release hardening
+### 7. Release hardening — implemented
 
-- Add fuzzing for text parsers and UTF-8 handling.
-- Add sanitizer and ABI compatibility builds.
+- Add opt-in Clang libFuzzer targets for numeric parsing, UTF-8 text checks,
+  and bounded regex compilation and matching. Meson runs short sanitizer-backed
+  fuzz smoke passes when fuzzing is enabled.
+- Document AddressSanitizer and UBSan build commands and ABI compatibility
+  checks.
 - Document supported grammars, Unicode behavior, regex resource limits, and
-  localization guidance.
-- Verify installed headers, versioned symbols, pkg-config usage, and dependency
-  boundaries with independent consumers.
+  application-owned localization of stable issue codes and typed parameters.
+- Verify public C symbols and ELF versioning, forbidden runtime dependencies,
+  installed headers, pkg-config metadata, and independent installed C and C++
+  consumers. The test compares symbols with a frozen ABI 0.1 manifest as well
+  as the declarations in the public header, and compiles frozen C struct-size
+  and field-offset assertions for the 64-bit ABI.
 
-**Release gate:** C, C++, CLI, and optional Lua consumers observe the same
-stable results, and no consumer requires UI or state dependencies merely to
-validate input.
+**Verification:** the default suite, core-only suite, opt-in fuzz smoke suite,
+ABI export audit, and staged installed-consumer checks pass. Sanitizer builds
+use Clang's `-Db_sanitize=address,undefined -Db_lundef=false` and omit the
+separate staged-consumer suite, whose consumer must be linked with that same
+sanitizer runtime. In ptrace-based runners, set `ASAN_OPTIONS=detect_leaks=0`
+because LeakSanitizer cannot inspect those processes; address and undefined
+behavior checks remain active. Fuzz targets additionally require Clang's
+libFuzzer.
+
+**Exit gate:** complete. C, C++, CLI, and optional Lua consumers observe the
+same stable results, and no consumer requires UI or state dependencies merely
+to validate input.
 
 ## Dependency rules
 
