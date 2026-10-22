@@ -125,16 +125,19 @@ candidate advances the revision, while invalid text and an out-of-range value
 leave the prior value and revision unchanged. The core validation Meson project
 does not discover or require `plainroot-state`.
 
-### 6. Lua adapter
+### 6. Lua adapter — implemented
 
 - Expose allowlisted built-in validators and immutable rule composition to Lua
   after C++ and CLI contracts stabilize.
 - Return structured codes and parameters for host localization.
-- Keep Lua runtime and execution policy outside the core library.
+- Keep Lua runtime and execution policy outside the core library. Meson builds
+  the adapter as a separate optional Lua 5.4 module.
 
-**Tests:** representative numeric/text validation, report conversion, invalid
-rule configuration, resource limits, and proof that input strings are treated
-as data rather than executed code.
+**Tests:** numeric and text validation, typed report conversion, invalid rule
+configuration, input and chain limits, strict option parsing, and proof that
+input strings are treated as data rather than executed code. The full project
+suite passes with the adapter enabled; a separate core-only build passes with
+`-Dlua_adapter=disabled`.
 
 ### 7. Release hardening
 

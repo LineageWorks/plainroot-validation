@@ -1,0 +1,6 @@
+option(
+  'lua_adapter',
+  type: 'feature',
+  value: 'auto',
+  description: 'Build the optional Lua 5.4 validation adapter',
+)

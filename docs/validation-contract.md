@@ -258,10 +258,14 @@ form/controller layer should track raw text, parsed values, baseline, dirty and
 touched status, issues, and asynchronous validation generations. These are
 form concerns, not validator state.
 
-Lua exposure follows a stable C++/C API and CLI demonstration. It should expose
-allowlisted rule names and structured results, not evaluate strings as
-programs. The validator project itself remains Lua-independent; an adapter
-belongs in a consumer or a separate optional integration target.
+Lua exposure follows the stable C++/C API and CLI demonstration. The optional
+Lua 5.4 module exposes allowlisted parser and rule names with structured
+results, and never evaluates input or patterns as programs. Its dependency is
+isolated to the adapter target; the core library remains Lua-independent.
+Builders are immutable snapshots and have a bounded maximum of 32 rules.
+Options are allowlisted and read as raw table entries, without invoking
+`__index` or `__pairs`. The adapter uses the core input and pattern limits and
+returns issue codes and typed parameters so hosts can localize messages.
 
 The separate workspace integration example demonstrates the command flow:
 parse raw text, stage the typed candidate in `Store::update()`, and validate

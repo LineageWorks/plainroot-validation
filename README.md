@@ -1,8 +1,9 @@
 # plainroot-validation
 
 `plainroot-validation` is an independent C++ library with a versioned C API
-for reusable input parsing and validation. It does not depend on the UI,
-toolkit, state store, Lua, settings service, or an event loop.
+for reusable input parsing and validation. The core library does not depend on
+the UI, toolkit, state store, Lua, settings service, or an event loop. An
+optional Lua 5.4 module adapts the same validators for scripted consumers.
 
 ## Current status
 
@@ -39,6 +40,10 @@ meson setup build plainroot-validation
 meson compile -C build
 ```
 
+Lua 5.4 is detected automatically. Set `-Dlua_adapter=disabled` to build the
+core library without discovering or linking Lua, or `-Dlua_adapter=enabled` to
+require Lua 5.4 and build the optional module.
+
 Run the CLI with one age value; it accepts the inclusive range 0 through 130:
 
 ```sh
@@ -55,6 +60,48 @@ stable parse issue code. The CLI is installed as
 `examples/state-integration` consumer. It links both `plainroot-validation`
 and `plainroot-state`; the validation library's own Meson project has no state
 dependency and remains buildable on its own.
+
+## Optional Lua adapter
+
+When enabled, Meson installs `plainroot_validation.so` under
+`$prefix/$libdir/lua/5.4`. Add that directory to `package.cpath` and load the
+module with `require("plainroot_validation")`. The adapter exposes only named
+built-in operations; input and regular-expression strings are passed to the
+validation library as data and are never compiled or evaluated as Lua.
+
+```lua
+local validation = require("plainroot_validation")
+
+local parsed = validation.numbers.parse_integer("42")
+if parsed.parsed then
+  local result = validation.numbers.with(parsed.value)
+    :is_in_range(0, 130)
+    :validate("profile.age")
+  -- result.status, result.valid, and result.issues are machine-readable.
+end
+
+local email = validation.text.with("alex@example.org")
+  :is_not_empty()
+  :is_email()
+  :validate("account.email")
+```
+
+Parsers are `numbers.parse_integer`, `numbers.parse_unsigned_integer`,
+`numbers.parse_real`, and `booleans.parse`. Parser results include `status`,
+`type`, `parsed`, `valid`, and `issues`, plus `value` only when parsing
+succeeds. Unsigned 64-bit values are returned as decimal strings so Lua cannot
+round them. Invalid input has `status = "ok"`, `parsed = false`, and a
+structured issue; adapter or rule-configuration errors use a non-`ok` status.
+Invalid API arguments return `nil, { status = "invalid-argument" }`.
+
+Numeric builders support `is_in_range` and, for real values, `is_finite`.
+Text builders support `is_not_empty`, `is_not_blank`, `has_length`,
+`has_maximum_bytes`, `is_email`, and `matches(pattern, "full"|"partial")`.
+Every chaining call creates a new immutable builder. Chains are limited to 32
+rules. Parser and text options are allowlisted, type-checked, and inspected as
+raw Lua table entries; text inputs use the same 64 KiB default and 1 MiB hard
+limit as the core API. Structured issues carry stable codes, field paths, and
+typed parameters rather than translated messages.
 
 ## C++ report example
 

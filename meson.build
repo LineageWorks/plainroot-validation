@@ -109,3 +109,39 @@ validation_text_regex_c_api_test = executable(
   install: false,
 )
 test('validation-text-regex-c-api', validation_text_regex_c_api_test)
+
+lua_adapter_feature = get_option('lua_adapter')
+lua_dep = dependency(
+  'lua',
+  version: '>=5.4,<5.5',
+  required: lua_adapter_feature,
+)
+
+if lua_dep.found()
+  lua_validation_module = shared_module(
+    'plainroot_validation',
+    'src/lua_module.cpp',
+    include_directories: public_inc,
+    dependencies: [lua_dep],
+    link_with: validation_library,
+    name_prefix: '',
+    install: true,
+    install_dir: get_option('libdir') / 'lua' / '5.4',
+  )
+
+  lua_test_harness = executable(
+    'plainroot-validation-lua-test',
+    'tests/lua_test_harness.cpp',
+    dependencies: [lua_dep],
+    install: false,
+  )
+  test(
+    'validation-lua-adapter',
+    lua_test_harness,
+    args: [
+      lua_validation_module.full_path(),
+      meson.current_source_dir() / 'tests/lua_adapter_test.lua',
+    ],
+    depends: lua_validation_module,
+  )
+endif
