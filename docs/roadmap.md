@@ -107,6 +107,8 @@ validators and expose both caller-owned reports and a sealed result wrapper.
 ### 5. CLI and application command integration — implemented
 
 - Demonstrate typed parsing and composition from a standalone CLI consumer.
+- Demonstrate composed UTF-8 text validation for display name and email input
+  from a separate CLI consumer.
 - Document how a command validates a candidate before committing a state
   transaction.
 - Keep validated writes behind application-owned commands while state has no
@@ -116,9 +118,11 @@ validators and expose both caller-owned reports and a sealed result wrapper.
 proves rejection leaves the candidate uncommitted. The validation library
 itself must still build and run without `plainroot-state`.
 
-The CLI accepts one age value, performs locale-independent integer parsing,
-composes an inclusive range check, and formats structured issue codes and
-parameters locally. The separate workspace integration consumer depends on
+The numeric CLI accepts one age value, performs locale-independent integer
+parsing, composes an inclusive range check, and formats structured issue codes
+and parameters locally. The text CLI reads a display name and email, composes
+text rules, and reports field-scoped issue codes without echoing input. The
+separate workspace integration consumer depends on
 both libraries, stages a candidate through `plainroot-state`, and rejects an
 invalid value from the update check callback. Its tests verify that an accepted
 candidate advances the revision, while invalid text and an out-of-range value

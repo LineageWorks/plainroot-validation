@@ -56,6 +56,21 @@ The first command prints `valid profile.age=42`. The second reports an
 stable parse issue code. The CLI is installed as
 `$prefix/bin/plainroot-validation-cli` with the validation library.
 
+The text CLI reads a display name and email address from two UTF-8 input lines,
+then composes nonblank, Unicode scalar-length, byte-limit, and email rules:
+
+```sh
+printf '%s\n' 'Ada Lovelace' 'ada@example.org' |
+  build/plainroot-validation/plainroot-validation-text-cli
+```
+
+Prompts and validation issues go to standard error. A valid submission prints
+the field paths and `valid` to standard output. Invalid submissions print
+stable issue codes and typed parameters without echoing the supplied values,
+then exit with status 2. This example shows that a CLI consumer owns input
+collection and presentation while the library stays independent of UI and
+toolkit code.
+
 `./scripts/workspace.sh test` also builds and runs the separate
 `examples/state-integration` consumer. It links both `plainroot-validation`
 and `plainroot-state`; the validation library's own Meson project has no state

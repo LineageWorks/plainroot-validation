@@ -58,6 +58,14 @@ validation_cli = executable(
   install: true,
 )
 
+text_validation_cli = executable(
+  'plainroot-validation-text-cli',
+  'examples/text_validation_cli.cpp',
+  include_directories: public_inc,
+  link_with: validation_library,
+  install: true,
+)
+
 cli_test_script = find_program('tests/validation_cli_test.sh')
 test(
   'validation-cli',
@@ -138,7 +146,11 @@ validation_abi_layout_test = executable(
 test('validation-abi-layout', validation_abi_layout_test)
 
 installed_consumer_test = find_program('tests/installed_consumer_test.sh')
-installed_consumer_dependencies = [validation_library, validation_cli]
+installed_consumer_dependencies = [
+  validation_library,
+  validation_cli,
+  text_validation_cli,
+]
 
 lua_adapter_feature = get_option('lua_adapter')
 lua_dep = dependency(
