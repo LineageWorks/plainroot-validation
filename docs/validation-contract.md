@@ -122,39 +122,59 @@ as `result` and `parsed`.
 
 ## Text validation and Unicode
 
-Text inputs are UTF-8. Invalid UTF-8 must produce a stable issue instead of
-being silently repaired. Validation never modifies the input.
+Text input defaults to a 64 KiB byte limit; callers can lower that limit, and
+the hard limit is 1 MiB. The library enforces it before scanning input.
+Malformed UTF-8 is appended as an `INVALID_UTF8` issue with the first invalid
+byte offset. Validation does not repair or normalize text.
 
-Resource limits should be measured in bytes and enforced before expensive
-rules. Human-oriented length constraints should document their unit. The
-recommended initial length unit is Unicode scalar values, with byte limits as
-a separate safety bound. Grapheme-cluster counting requires a Unicode data
-dependency and is deferred until a real consumer establishes that need.
+`RequiredTextValidator` rejects only an empty string. Whitespace is accepted.
+`NonblankTextValidator` rejects the empty string and strings made entirely of
+Unicode 17.0 `White_Space` characters. The set is pinned from the official
+[Unicode 17.0 PropList.txt](https://www.unicode.org/Public/17.0.0/ucd/PropList.txt)
+and includes tabs, line separators, and spaces such as U+00A0 and U+3000. It
+does not treat U+200B ZERO WIDTH SPACE as whitespace.
 
-Required text and nonblank text are separate rules. Nonblank text will use the
-Unicode `White_Space` property from a documented Unicode data version; that
-rule is deferred until the text-rules phase. Human-oriented length counts
-Unicode scalar values, not grapheme clusters, and performs no normalization.
-Email validation is syntax screening only; it cannot prove mailbox existence
-or delivery. Version one email syntax is ASCII-only. Internationalized email
-support and normalization are deferred.
+`TextLengthValidator` counts Unicode scalar values, not bytes or grapheme
+clusters. A base letter followed by a combining accent counts as two. It
+performs no normalization. `TextByteLimitValidator` checks UTF-8 byte length
+separately and reports `TOO_LONG` with a `maximum_bytes` parameter.
+
+`EmailValidator` is an ASCII syntax screen, not mailbox verification. It
+accepts a dot-atom local part up to 64 bytes and a dotted domain with at least
+two labels, each at most 63 bytes; the whole address is at most 254 bytes.
+Domain labels must start and end with an ASCII letter or digit, with hyphens
+allowed internally. It rejects quoted local parts, address literals,
+internationalized addresses, and single-label domains. It cannot establish
+that a mailbox exists or can receive mail.
 
 ## Regular expressions and untrusted input
 
 Patterns are rule data, never source code. The library must not evaluate text
 as Lua, shell, SQL, or another language to validate it.
 
-Invalid patterns produce a rule-construction error. Regex matching must have
-explicit pattern and input size limits. Before publishing a regex API, choose
-and document an engine and its worst-case behavior. Do not expose an
-unbounded-backtracking engine to patterns or inputs that may be untrusted.
-Regex support is deferred from the initial ABI until a bounded-time engine and
-its build-time dependency policy are selected. No `std::regex` or other
-unbounded-backtracking API will be published in version one.
+`CompiledPattern` uses [RE2](https://github.com/google/re2) in UTF-8 mode. RE2
+avoids exponential backtracking and has matching time linear in input size for
+a fixed compiled pattern. Patterns are limited to 4 KiB by default and 64 KiB
+at most. Input uses the same default 64 KiB and hard 1 MiB text byte limits as
+other text rules. RE2 is configured with an 8 MiB budget for its compiled
+program and DFA caches; this is not a cap on every allocation made by the
+process.
 
-Validation does not replace parameterized SQL, safe process APIs, HTML
-escaping, or context-specific output encoding. Passing a validator does not
-make input safe for those contexts.
+Regex compilation reports `INVALID_RULE` for unsupported syntax or malformed
+expressions; a compiled program that exceeds RE2's internal limit returns
+`LIMIT_EXCEEDED`. The API returns only a boolean match result, without
+captures. Full mode requires a match of the whole input; partial mode looks
+for a matching substring, subject to anchors in the pattern. RE2 does not
+support look-around or backreferences; see its
+[syntax reference](https://github.com/google/re2/wiki/Syntax). Compiled
+patterns can be reused for concurrent validation. Callers must keep a pattern
+alive until every validation using it has finished.
+
+Patterns are rule data, never executable code. The library does not evaluate
+text as Lua, shell, SQL, or another language. Validation does not replace
+parameterized SQL, safe process APIs, HTML escaping, or context-specific
+output encoding. Passing a validator does not make input safe for those
+contexts.
 
 ## Composable rules and factories
 
@@ -198,9 +218,10 @@ where a compiled rule or report needs retained lifetime, and caller-readable
 results. Every entry point catches implementation exceptions. No C++ exception
 may cross the C ABI. Public headers must not expose backend or UI types.
 
-The standalone Meson package should install its headers and pkg-config
-metadata. Keep runtime dependencies small. A third-party regex or Unicode
-dependency must have a documented reason and build-time detection policy.
+The standalone Meson package installs its headers and pkg-config metadata.
+RE2 is a required Meson dependency discovered through pkg-config and is listed
+as a private pkg-config dependency because its types do not appear in public
+headers. The pinned Unicode whitespace table avoids a runtime ICU dependency.
 
 The first ABI version provides a bounded, explicitly sealed report builder.
 Reports contain stable issue codes, optional UTF-8 field paths, and named

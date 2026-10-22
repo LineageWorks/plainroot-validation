@@ -18,6 +18,9 @@ extern "C" {
 #define PLAINROOT_VALIDATION_MAXIMUM_TEXT_BYTES (16u * 1024u * 1024u)
 #define PLAINROOT_VALIDATION_DEFAULT_MAXIMUM_INPUT_BYTES (64u * 1024u)
 #define PLAINROOT_VALIDATION_MAXIMUM_INPUT_BYTES (1024u * 1024u)
+#define PLAINROOT_VALIDATION_DEFAULT_MAXIMUM_PATTERN_BYTES (4u * 1024u)
+#define PLAINROOT_VALIDATION_MAXIMUM_PATTERN_BYTES (64u * 1024u)
+#define PLAINROOT_VALIDATION_REGEX_MAXIMUM_MEMORY_BYTES (8u * 1024u * 1024u)
 
 typedef enum plainroot_validation_result_v1 {
   PLAINROOT_VALIDATION_OK = 0,
@@ -48,6 +51,7 @@ typedef enum plainroot_validation_issue_code_v1 {
   PLAINROOT_VALIDATION_ISSUE_PATTERN_MISMATCH = 10,
   PLAINROOT_VALIDATION_ISSUE_INVALID_EMAIL = 11,
   PLAINROOT_VALIDATION_ISSUE_NON_FINITE_NUMBER = 12,
+  PLAINROOT_VALIDATION_ISSUE_BLANK = 13,
 } plainroot_validation_issue_code_v1;
 
 typedef enum plainroot_validation_parameter_type_v1 {
@@ -119,6 +123,7 @@ typedef struct plainroot_validation_issue_view_v1 {
 } plainroot_validation_issue_view_v1;
 
 typedef struct plainroot_validation_report plainroot_validation_report;
+typedef struct plainroot_validation_pattern plainroot_validation_pattern;
 
 typedef struct plainroot_validation_parse_options_v1 {
   uint32_t struct_size;
@@ -158,6 +163,23 @@ typedef struct plainroot_validation_parse_bool_result_v1 {
   uint8_t value;
   plainroot_validation_issue_code_v1 failure_code;
 } plainroot_validation_parse_bool_result_v1;
+
+typedef struct plainroot_validation_text_options_v1 {
+  uint32_t struct_size;
+  /* Zero selects the documented default. */
+  uint32_t maximum_input_bytes;
+} plainroot_validation_text_options_v1;
+
+typedef struct plainroot_validation_pattern_options_v1 {
+  uint32_t struct_size;
+  /* Zero selects the documented default. */
+  uint32_t maximum_pattern_bytes;
+} plainroot_validation_pattern_options_v1;
+
+typedef enum plainroot_validation_pattern_match_mode_v1 {
+  PLAINROOT_VALIDATION_PATTERN_PARTIAL = 0,
+  PLAINROOT_VALIDATION_PATTERN_FULL = 1,
+} plainroot_validation_pattern_match_mode_v1;
 
 PLAINROOT_VALIDATION_API uint32_t
 plainroot_validation_abi_version_v1(void);
@@ -210,6 +232,58 @@ plainroot_validation_parse_bool_text_v1(
     const char *text, size_t text_size,
     const plainroot_validation_parse_options_v1 *options,
     plainroot_validation_parse_bool_result_v1 *output);
+
+/* Text checks append an issue for invalid text, including malformed UTF-8, and
+ * return OK if the check ran. Human text length counts Unicode scalar values,
+ * not bytes or grapheme clusters. Zero options select a 64 KiB input limit;
+ * the hard limit is 1 MiB. Nonblank uses Unicode 17.0 White_Space. */
+PLAINROOT_VALIDATION_API plainroot_validation_result_v1
+plainroot_validation_validate_required_text_v1(
+    plainroot_validation_report *report, const char *field, size_t field_size,
+    const char *text, size_t text_size,
+    const plainroot_validation_text_options_v1 *options);
+PLAINROOT_VALIDATION_API plainroot_validation_result_v1
+plainroot_validation_validate_nonblank_text_v1(
+    plainroot_validation_report *report, const char *field, size_t field_size,
+    const char *text, size_t text_size,
+    const plainroot_validation_text_options_v1 *options);
+PLAINROOT_VALIDATION_API plainroot_validation_result_v1
+plainroot_validation_validate_text_length_v1(
+    plainroot_validation_report *report, const char *field, size_t field_size,
+    const char *text, size_t text_size, uint32_t minimum,
+    uint32_t maximum, const plainroot_validation_text_options_v1 *options);
+PLAINROOT_VALIDATION_API plainroot_validation_result_v1
+plainroot_validation_validate_text_max_bytes_v1(
+    plainroot_validation_report *report, const char *field, size_t field_size,
+    const char *text, size_t text_size, uint32_t maximum_bytes,
+    const plainroot_validation_text_options_v1 *options);
+PLAINROOT_VALIDATION_API plainroot_validation_result_v1
+plainroot_validation_validate_email_text_v1(
+    plainroot_validation_report *report, const char *field, size_t field_size,
+    const char *text, size_t text_size,
+    const plainroot_validation_text_options_v1 *options);
+
+/* Regex support uses RE2 in UTF-8 mode. Patterns are data, not executable
+ * code. The default pattern limit is 4 KiB; the hard pattern limit is 64 KiB.
+ * RE2's compiled program and cache budget is 8 MiB. Inputs use the text byte
+ * limits above. Full mode matches the whole input; partial mode finds a
+ * matching substring. Invalid UTF-8 returns INVALID_UTF8; malformed or
+ * unsupported regex syntax returns INVALID_RULE. */
+PLAINROOT_VALIDATION_API plainroot_validation_result_v1
+plainroot_validation_pattern_compile_v1(
+    const char *pattern, size_t pattern_size,
+    const plainroot_validation_pattern_options_v1 *options,
+    plainroot_validation_pattern **output);
+PLAINROOT_VALIDATION_API void
+plainroot_validation_pattern_release_v1(
+    plainroot_validation_pattern *pattern);
+PLAINROOT_VALIDATION_API plainroot_validation_result_v1
+plainroot_validation_validate_pattern_v1(
+    plainroot_validation_report *report, const char *field, size_t field_size,
+    const char *text, size_t text_size,
+    const plainroot_validation_text_options_v1 *text_options,
+    const plainroot_validation_pattern *pattern,
+    plainroot_validation_pattern_match_mode_v1 mode);
 
 /* Zero option fields select defaults. Unknown future option fields are
  * ignored according to struct_size. The output handle is owned by the caller. */

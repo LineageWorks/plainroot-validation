@@ -53,7 +53,7 @@ bool checked_add(uint64_t left, uint64_t right, uint64_t& result) noexcept {
 
 bool known_issue_code(plainroot_validation_issue_code_v1 code) noexcept {
   return code >= PLAINROOT_VALIDATION_ISSUE_REQUIRED &&
-         code <= PLAINROOT_VALIDATION_ISSUE_NON_FINITE_NUMBER;
+         code <= PLAINROOT_VALIDATION_ISSUE_BLANK;
 }
 
 bool known_parameter_type(
@@ -230,6 +230,8 @@ const char *plainroot_validation_issue_code_name_v1(
       return "invalid-email";
     case PLAINROOT_VALIDATION_ISSUE_NON_FINITE_NUMBER:
       return "non-finite-number";
+    case PLAINROOT_VALIDATION_ISSUE_BLANK:
+      return "blank";
   }
   return "unknown-issue";
 }

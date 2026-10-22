@@ -6,15 +6,20 @@ toolkit, state store, Lua, settings service, or an event loop.
 
 ## Current status
 
-The implementation provides the shared report foundation and typed numeric
-rules: stable issue codes, UTF-8 field context, named typed parameters,
-explicit C handle lifetime, bounded report sizes, inclusive integer and real
-ranges, finite-number checks, and locale-independent numeric and boolean text
-parsers. Text rules and composable validator factories are the next phases.
+The implementation provides the shared report foundation, typed numeric
+rules and parsers, UTF-8 text validation, ASCII email syntax screening, and
+compiled RE2 patterns. It includes stable issue codes, named typed parameters,
+explicit C handle lifetime, bounded report/input/pattern sizes, inclusive
+numeric ranges, finite-number checks, required and nonblank checks, Unicode
+scalar length, byte limits, and full or partial regex matching. Immutable
+validator factories and composition are the next phase.
 
 The library installs C and C++ headers and pkg-config metadata. The workspace
 build includes this independent target. A small CLI example shows how a
 consumer can format issue codes without UI or toolkit dependencies.
+RE2 is required and detected with pkg-config; it is kept out of the public
+headers. Unicode whitespace uses a pinned Unicode 17.0 property table rather
+than an ICU runtime dependency.
 
 ## Build
 

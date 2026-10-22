@@ -13,12 +13,16 @@ project(
 )
 
 public_inc = include_directories('include')
+re2_dep = dependency('re2', method: 'pkg-config')
 
 validation_library = library(
   'plainroot-validation',
   'src/report.cpp',
   'src/numeric.cpp',
+  'src/text.cpp',
+  'src/regex.cpp',
   include_directories: public_inc,
+  dependencies: [re2_dep],
   cpp_args: ['-DPLAINROOT_VALIDATION_BUILD', '-fvisibility-inlines-hidden'],
   gnu_symbol_visibility: 'hidden',
   version: meson.project_version(),
@@ -43,6 +47,7 @@ pkg.generate(
   description: 'Independent structured validation results for PlainrootDE',
   version: meson.project_version(),
   subdirs: '.',
+  requires_private: [re2_dep],
 )
 
 executable(
@@ -62,6 +67,15 @@ validation_cpp_test = executable(
 )
 test('validation-cpp', validation_cpp_test)
 
+validation_text_regex_cpp_test = executable(
+  'plainroot-validation-text-regex-cpp-test',
+  'tests/text_regex_test.cpp',
+  include_directories: public_inc,
+  link_with: validation_library,
+  install: false,
+)
+test('validation-text-regex-cpp', validation_text_regex_cpp_test)
+
 validation_c_api_test = executable(
   'plainroot-validation-c-api-test',
   'tests/c_api_test.c',
@@ -70,3 +84,12 @@ validation_c_api_test = executable(
   install: false,
 )
 test('validation-c-api', validation_c_api_test)
+
+validation_text_regex_c_api_test = executable(
+  'plainroot-validation-text-regex-c-api-test',
+  'tests/text_regex_c_api_test.c',
+  include_directories: public_inc,
+  link_with: validation_library,
+  install: false,
+)
+test('validation-text-regex-c-api', validation_text_regex_c_api_test)

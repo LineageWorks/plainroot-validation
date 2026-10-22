@@ -46,6 +46,19 @@ struct ParseOptions {
   bool boolean_accept_0_1 = false;
 };
 
+struct TextOptions {
+  uint32_t maximum_input_bytes = 0;
+};
+
+struct PatternOptions {
+  uint32_t maximum_pattern_bytes = 0;
+};
+
+enum class PatternMatchMode : uint32_t {
+  Partial = PLAINROOT_VALIDATION_PATTERN_PARTIAL,
+  Full = PLAINROOT_VALIDATION_PATTERN_FULL,
+};
+
 template <typename T>
 struct ParseResult {
   Result result = PLAINROOT_VALIDATION_OK;
@@ -94,6 +107,22 @@ inline plainroot_validation_parse_options_v1 native_parse_options(
       options.boolean_case_insensitive_ascii ? 1 : 0;
   native.boolean_accept_yes_no = options.boolean_accept_yes_no ? 1 : 0;
   native.boolean_accept_0_1 = options.boolean_accept_0_1 ? 1 : 0;
+  return native;
+}
+
+inline plainroot_validation_text_options_v1 native_text_options(
+    const TextOptions& options) noexcept {
+  plainroot_validation_text_options_v1 native{};
+  native.struct_size = sizeof(native);
+  native.maximum_input_bytes = options.maximum_input_bytes;
+  return native;
+}
+
+inline plainroot_validation_pattern_options_v1 native_pattern_options(
+    const PatternOptions& options) noexcept {
+  plainroot_validation_pattern_options_v1 native{};
+  native.struct_size = sizeof(native);
+  native.maximum_pattern_bytes = options.maximum_pattern_bytes;
   return native;
 }
 
@@ -455,6 +484,151 @@ class FiniteNumberValidator {
     return plainroot_validation_validate_finite_f64_v1(
         native_report, field.data(), field.size(), static_cast<double>(value));
   }
+};
+
+class RequiredTextValidator {
+ public:
+  Result validate(std::string_view text, Report& report,
+                  std::string_view field = {},
+                  TextOptions options = {}) const noexcept {
+    auto *native_report = detail::ReportAccess::get(report);
+    if (!native_report)
+      return PLAINROOT_VALIDATION_INVALID_ARGUMENT;
+    const auto native_options = detail::native_text_options(options);
+    return plainroot_validation_validate_required_text_v1(
+        native_report, field.data(), field.size(), text.data(), text.size(),
+        &native_options);
+  }
+};
+
+class NonblankTextValidator {
+ public:
+  Result validate(std::string_view text, Report& report,
+                  std::string_view field = {},
+                  TextOptions options = {}) const noexcept {
+    auto *native_report = detail::ReportAccess::get(report);
+    if (!native_report)
+      return PLAINROOT_VALIDATION_INVALID_ARGUMENT;
+    const auto native_options = detail::native_text_options(options);
+    return plainroot_validation_validate_nonblank_text_v1(
+        native_report, field.data(), field.size(), text.data(), text.size(),
+        &native_options);
+  }
+};
+
+class TextLengthValidator {
+ public:
+  TextLengthValidator(uint32_t minimum, uint32_t maximum) noexcept
+      : minimum_(minimum), maximum_(maximum) {}
+
+  Result validate(std::string_view text, Report& report,
+                  std::string_view field = {},
+                  TextOptions options = {}) const noexcept {
+    auto *native_report = detail::ReportAccess::get(report);
+    if (!native_report)
+      return PLAINROOT_VALIDATION_INVALID_ARGUMENT;
+    const auto native_options = detail::native_text_options(options);
+    return plainroot_validation_validate_text_length_v1(
+        native_report, field.data(), field.size(), text.data(), text.size(),
+        minimum_, maximum_, &native_options);
+  }
+
+ private:
+  uint32_t minimum_;
+  uint32_t maximum_;
+};
+
+class TextByteLimitValidator {
+ public:
+  explicit TextByteLimitValidator(uint32_t maximum_bytes) noexcept
+      : maximum_bytes_(maximum_bytes) {}
+
+  Result validate(std::string_view text, Report& report,
+                  std::string_view field = {},
+                  TextOptions options = {}) const noexcept {
+    auto *native_report = detail::ReportAccess::get(report);
+    if (!native_report)
+      return PLAINROOT_VALIDATION_INVALID_ARGUMENT;
+    const auto native_options = detail::native_text_options(options);
+    return plainroot_validation_validate_text_max_bytes_v1(
+        native_report, field.data(), field.size(), text.data(), text.size(),
+        maximum_bytes_, &native_options);
+  }
+
+ private:
+  uint32_t maximum_bytes_;
+};
+
+class EmailValidator {
+ public:
+  Result validate(std::string_view text, Report& report,
+                  std::string_view field = {},
+                  TextOptions options = {}) const noexcept {
+    auto *native_report = detail::ReportAccess::get(report);
+    if (!native_report)
+      return PLAINROOT_VALIDATION_INVALID_ARGUMENT;
+    const auto native_options = detail::native_text_options(options);
+    return plainroot_validation_validate_email_text_v1(
+        native_report, field.data(), field.size(), text.data(), text.size(),
+        &native_options);
+  }
+};
+
+class CompiledPattern {
+ public:
+  CompiledPattern() = default;
+  ~CompiledPattern() { reset(); }
+  CompiledPattern(const CompiledPattern&) = delete;
+  CompiledPattern& operator=(const CompiledPattern&) = delete;
+
+  CompiledPattern(CompiledPattern&& other) noexcept
+      : handle_(std::exchange(other.handle_, nullptr)) {}
+
+  CompiledPattern& operator=(CompiledPattern&& other) noexcept {
+    if (this != &other) {
+      reset();
+      handle_ = std::exchange(other.handle_, nullptr);
+    }
+    return *this;
+  }
+
+  static Result compile(std::string_view pattern, CompiledPattern& output,
+                        PatternOptions options = {}) noexcept {
+    const auto native_options = detail::native_pattern_options(options);
+    plainroot_validation_pattern *native_pattern = nullptr;
+    const auto result = plainroot_validation_pattern_compile_v1(
+        pattern.data(), pattern.size(), &native_options, &native_pattern);
+    if (result != PLAINROOT_VALIDATION_OK)
+      return result;
+    output.reset();
+    output.handle_ = native_pattern;
+    return PLAINROOT_VALIDATION_OK;
+  }
+
+  Result validate(std::string_view text, Report& report,
+                  std::string_view field = {},
+                  PatternMatchMode mode = PatternMatchMode::Full,
+                  TextOptions options = {}) const noexcept {
+    auto *native_report = detail::ReportAccess::get(report);
+    if (!native_report || !handle_)
+      return PLAINROOT_VALIDATION_INVALID_ARGUMENT;
+    const auto native_options = detail::native_text_options(options);
+    return plainroot_validation_validate_pattern_v1(
+        native_report, field.data(), field.size(), text.data(), text.size(),
+        &native_options, handle_,
+        static_cast<plainroot_validation_pattern_match_mode_v1>(mode));
+  }
+
+  void reset() noexcept {
+    if (handle_)
+      plainroot_validation_pattern_release_v1(handle_);
+    handle_ = nullptr;
+  }
+
+  explicit operator bool() const noexcept { return handle_ != nullptr; }
+
+ private:
+  plainroot_validation_pattern *handle_ = nullptr;
 };
 
 }  // namespace plainroot::validation

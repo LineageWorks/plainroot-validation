@@ -23,16 +23,12 @@ shell, SQL, HTML, Lua, or other output contexts.
 - Define structured reports, issue ordering, maximum result size, and rule
   configuration errors.
 - Define typed numeric range semantics and floating-point handling.
-- Define UTF-8 validity, human-oriented length units, number grammar, and
-  boolean tokens. Defer Unicode whitespace implementation to phase 3 with a
-  pinned Unicode data version.
-- Defer regex support from the version 1 ABI until a bounded-time engine and
-  dependency policy are selected.
+- Define UTF-8 validity, human-oriented length units, number grammar, boolean
+  tokens, Unicode whitespace version, email syntax screen, and regex engine.
 - Confirm LGPL-3.0-or-later, symbol versioning, ownership, and C/C++ API shape.
 
-**Exit gate:** complete. Numeric and boolean parsing semantics are documented;
-regex and Unicode whitespace behavior are explicitly deferred out of the
-initial ABI.
+**Exit gate:** complete. Numeric, boolean, Unicode, email, and regex semantics
+are documented before their APIs are exposed.
 
 ### 1. Standalone project and result foundation — implemented
 
@@ -72,19 +68,25 @@ and all configured boolean tokens are covered through C and C++ callers.
 **Exit gate:** complete. The public C and C++ parser and numeric-rule APIs
 build and pass their dedicated test executables.
 
-### 3. Text rules and regex policy
+### 3. Text rules and regex policy — implemented
 
-- Implement UTF-8 validity, required/nonblank text, byte limits, and the
-  agreed human-oriented length rule.
-- Implement the agreed email syntax check and stable pattern mismatch results.
-- Add a compiled regex/rule representation with bounded pattern and input
-  sizes.
+- Implement required and nonblank checks, with Unicode 17.0 `White_Space`
+  semantics.
+- Count Unicode scalar values for human-oriented length and provide a separate
+  UTF-8 byte limit.
+- Add the documented ASCII email syntax screen.
+- Add reusable RE2-backed compiled patterns with UTF-8 matching, full and
+  partial modes, explicit size limits, and bounded compiled-program memory.
 - Keep normalization outside validators.
 
-**Tests:** empty and whitespace-only input, multibyte strings, invalid UTF-8,
-length boundaries, malformed patterns, adversarial patterns/inputs, and input
-size limits. Security tests must show the selected regex policy avoids
-unbounded work.
+**Verification:** public C and C++ tests pass for empty and whitespace-only
+input, Unicode whitespace and scalar lengths, malformed UTF-8 and byte offsets,
+length and byte boundaries, email syntax, invalid patterns, unsupported RE2
+syntax, full and partial matching, pattern/input limits, and a nested-repeat
+near-match input. RE2 avoids catastrophic backtracking.
+
+**Exit gate:** complete. C and C++ callers use the same text, email, and regex
+behavior through the versioned C API.
 
 ### 4. Immutable composition and convenience factories
 
