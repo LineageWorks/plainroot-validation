@@ -11,8 +11,9 @@ rules and parsers, UTF-8 text validation, ASCII email syntax screening, and
 compiled RE2 patterns. It includes stable issue codes, named typed parameters,
 explicit C handle lifetime, bounded report/input/pattern sizes, inclusive
 numeric ranges, finite-number checks, required and nonblank checks, Unicode
-scalar length, byte limits, and full or partial regex matching. Immutable
-validator factories and composition are the next phase.
+scalar length, byte limits, and full or partial regex matching. Immutable C++
+rule composition is available through numeric and text factories; the next
+phase demonstrates it in standalone CLI and application commands.
 
 The library installs C and C++ headers and pkg-config metadata. The workspace
 build includes this independent target. A small CLI example shows how a
@@ -80,6 +81,37 @@ if (age) {
 Parsers use ASCII syntax independent of process locale. They do not trim
 whitespace unless explicitly enabled. Boolean aliases and case-insensitive
 matching are opt-in through `ParseOptions`.
+
+## Composed validation example
+
+```cpp
+using namespace plainroot::validation;
+
+const auto age = Validators::Numbers::parseInteger<int>("42");
+if (age) {
+  const auto result = Validators::Numbers::with(age.value)
+                          .isInRange(0, 130)
+                          .validate("profile.age");
+  if (!result.valid()) {
+    // Inspect result.issue_count() and result.issue() for stable codes.
+  }
+}
+
+CompiledPattern account_pattern;
+CompiledPattern::compile(R"(^[a-z0-9_]{3,24}$)", account_pattern);
+const auto account = Validators::Text::with("alex_42")
+                         .isNotEmpty()
+                         .hasLength(3, 24)
+                         .matches(account_pattern)
+                         .validate("profile.account");
+```
+
+Factory chains are immutable snapshots. Text factories copy their input,
+numeric factories store values by value, and copied compiled-pattern handles
+share the already-compiled expression. Validation failures accumulate in
+declaration order. An operation error such as an invalid rule configuration
+stops later rules and is returned in `ValidationResult::status()`. Parsing
+remains separate: run value constraints only when the parse result succeeds.
 
 ## Design documents
 

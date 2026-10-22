@@ -178,34 +178,44 @@ contexts.
 
 ## Composable rules and factories
 
-The C++ API should provide small validators and immutable rule composition.
-The convenience factories should delegate to those validators rather than
-implementing separate checks.
+The C++ API provides small primitive validators and immutable rule composition.
+The convenience factories delegate to those validators rather than implement
+separate checks. `Validators::Numbers::with(value)` stores a numeric snapshot;
+`Validators::Text::with(input)` copies the UTF-8 input into immutable owned
+storage. Compiled pattern handles are shareable, so a rule chain retains its
+compiled expression even if the caller releases its own handle.
 
-An intended shape is:
+The fluent API supports this shape:
 
 ```cpp
 auto parsed = Validators::Numbers::parseInteger<int>(input);
 if (parsed) {
-    auto report = RangeValidator<int>{2, 10}.validate(parsed.value());
+    auto result = Validators::Numbers::with(parsed.value)
+        .isInRange(2, 10)
+        .validate("profile.count");
 }
 
-auto report = Validators::Text::with(input)
+auto result = Validators::Text::with(input)
     .isNotEmpty()
     .hasLength(3, 80)
     .matches(compiled_pattern)
-    .validate();
+    .validate("profile.name");
 ```
 
-Names and exact syntax remain subject to the roadmap's API review. In
-particular, text length constraints must not be named or overloaded as
-numeric value ranges.
+Text length constraints are named separately from numeric value ranges.
+Factories can validate into a caller-owned report with
+`validate(report, field)`, or create a sealed `ValidationResult` with
+`validate(field)`. The result exposes the operation status, validity, and
+structured issues.
 
-Composition should declare whether it accumulates all independent failures or
-short-circuits. Rule objects should be immutable after construction and safe
-to reuse. A custom C++ callback extension point may be considered after the
-built-in rule model is stable; arbitrary Lua callbacks are not part of the
-initial data-only integration.
+Validation failures accumulate in declaration order. A rule's operation error
+such as `INVALID_RULE`, `LIMIT_EXCEEDED`, or a sealed report stops later rules;
+ordinary user-input failures remain in the report and do not stop independent
+checks. Parsing remains a separate operation, so callers run value rules only
+after parsing succeeds. Rule chains are immutable and reusable. A custom C++
+callback extension point may be considered after the built-in rule model is
+stable; arbitrary Lua callbacks are not part of the initial data-only
+integration.
 
 ## C and C++ API boundary
 

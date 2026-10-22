@@ -76,6 +76,15 @@ validation_text_regex_cpp_test = executable(
 )
 test('validation-text-regex-cpp', validation_text_regex_cpp_test)
 
+validation_composition_test = executable(
+  'plainroot-validation-composition-test',
+  'tests/composition_test.cpp',
+  include_directories: public_inc,
+  link_with: validation_library,
+  install: false,
+)
+test('validation-composition', validation_composition_test)
+
 validation_c_api_test = executable(
   'plainroot-validation-c-api-test',
   'tests/c_api_test.c',

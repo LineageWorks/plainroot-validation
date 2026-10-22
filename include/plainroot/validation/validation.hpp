@@ -7,9 +7,11 @@
 #include <cstdint>
 #include <cmath>
 #include <limits>
+#include <memory>
 #include <new>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <type_traits>
 #include <utility>
 #include <variant>
@@ -342,7 +344,47 @@ struct ReportAccess {
   }
 };
 
+template <typename T, typename... Rules>
+class NumberRuleSet;
+
+template <typename... Rules>
+class TextRuleSet;
+
 }  // namespace detail
+
+class ValidationResult {
+ public:
+  Result status() const noexcept { return status_; }
+
+  bool valid() const noexcept {
+    if (status_ != PLAINROOT_VALIDATION_OK || !report_)
+      return false;
+    bool output = false;
+    return report_.is_valid(output) == PLAINROOT_VALIDATION_OK && output;
+  }
+
+  Result issue_count(std::size_t& output) const noexcept {
+    return report_.issue_count(output);
+  }
+
+  Result issue(std::size_t index, Issue& output) const noexcept {
+    return report_.issue(index, output);
+  }
+
+  const Report& report() const noexcept { return report_; }
+
+ private:
+  ValidationResult(Result status, Report&& report) noexcept
+      : status_(status), report_(std::move(report)) {}
+
+  Result status_ = PLAINROOT_VALIDATION_INVALID_ARGUMENT;
+  Report report_;
+
+  template <typename, typename...>
+  friend class detail::NumberRuleSet;
+  template <typename...>
+  friend class detail::TextRuleSet;
+};
 
 template <typename T>
   requires detail::is_supported_integer_v<T>
@@ -577,20 +619,10 @@ class EmailValidator {
 class CompiledPattern {
  public:
   CompiledPattern() = default;
-  ~CompiledPattern() { reset(); }
-  CompiledPattern(const CompiledPattern&) = delete;
-  CompiledPattern& operator=(const CompiledPattern&) = delete;
-
-  CompiledPattern(CompiledPattern&& other) noexcept
-      : handle_(std::exchange(other.handle_, nullptr)) {}
-
-  CompiledPattern& operator=(CompiledPattern&& other) noexcept {
-    if (this != &other) {
-      reset();
-      handle_ = std::exchange(other.handle_, nullptr);
-    }
-    return *this;
-  }
+  CompiledPattern(const CompiledPattern&) noexcept = default;
+  CompiledPattern& operator=(const CompiledPattern&) noexcept = default;
+  CompiledPattern(CompiledPattern&&) noexcept = default;
+  CompiledPattern& operator=(CompiledPattern&&) noexcept = default;
 
   static Result compile(std::string_view pattern, CompiledPattern& output,
                         PatternOptions options = {}) noexcept {
@@ -600,9 +632,18 @@ class CompiledPattern {
         pattern.data(), pattern.size(), &native_options, &native_pattern);
     if (result != PLAINROOT_VALIDATION_OK)
       return result;
-    output.reset();
-    output.handle_ = native_pattern;
-    return PLAINROOT_VALIDATION_OK;
+    try {
+      std::shared_ptr<plainroot_validation_pattern> compiled(
+          native_pattern, [](plainroot_validation_pattern *value) noexcept {
+            plainroot_validation_pattern_release_v1(value);
+          });
+      output.handle_ = std::move(compiled);
+      return PLAINROOT_VALIDATION_OK;
+    } catch (const std::bad_alloc&) {
+      return PLAINROOT_VALIDATION_OUT_OF_MEMORY;
+    } catch (...) {
+      return PLAINROOT_VALIDATION_INTERNAL_ERROR;
+    }
   }
 
   Result validate(std::string_view text, Report& report,
@@ -615,20 +656,199 @@ class CompiledPattern {
     const auto native_options = detail::native_text_options(options);
     return plainroot_validation_validate_pattern_v1(
         native_report, field.data(), field.size(), text.data(), text.size(),
-        &native_options, handle_,
+        &native_options, handle_.get(),
         static_cast<plainroot_validation_pattern_match_mode_v1>(mode));
   }
 
-  void reset() noexcept {
-    if (handle_)
-      plainroot_validation_pattern_release_v1(handle_);
-    handle_ = nullptr;
-  }
+  void reset() noexcept { handle_.reset(); }
 
-  explicit operator bool() const noexcept { return handle_ != nullptr; }
+  explicit operator bool() const noexcept { return static_cast<bool>(handle_); }
 
  private:
-  plainroot_validation_pattern *handle_ = nullptr;
+  std::shared_ptr<plainroot_validation_pattern> handle_;
+};
+
+namespace detail {
+
+template <typename Value, typename... Rules>
+class NumberRuleSet {
+ public:
+  explicit NumberRuleSet(Value value) : value_(value) {}
+
+  auto isInRange(Value minimum, Value maximum) const {
+    return append(RangeValidator<Value>{minimum, maximum});
+  }
+
+  auto isFinite() const
+    requires is_supported_real_v<Value>
+  {
+    return append(FiniteNumberValidator<Value>{});
+  }
+
+  Result validate(Report& report, std::string_view field = {}) const noexcept {
+    if (!report)
+      return PLAINROOT_VALIDATION_INVALID_ARGUMENT;
+    Result status = PLAINROOT_VALIDATION_OK;
+    std::apply(
+        [&](const auto&... rules) {
+          ((status == PLAINROOT_VALIDATION_OK
+                ? status = rules.validate(value_, report, field)
+                : status),
+           ...);
+        },
+        rules_);
+    return status;
+  }
+
+  ValidationResult validate(std::string_view field = {}) const noexcept {
+    Report report;
+    Result status = Report::create(report);
+    if (status == PLAINROOT_VALIDATION_OK)
+      status = validate(report, field);
+    if (report) {
+      const Result seal_status = report.seal();
+      if (status == PLAINROOT_VALIDATION_OK)
+        status = seal_status;
+    }
+    return ValidationResult(status, std::move(report));
+  }
+
+ private:
+  NumberRuleSet(Value value, std::tuple<Rules...> rules)
+      : value_(value), rules_(std::move(rules)) {}
+
+  template <typename Rule>
+  auto append(Rule rule) const {
+    auto combined = std::tuple_cat(rules_, std::tuple<Rule>{std::move(rule)});
+    return NumberRuleSet<Value, Rules..., Rule>(value_, std::move(combined));
+  }
+
+  Value value_;
+  std::tuple<Rules...> rules_;
+
+  template <typename, typename...>
+  friend class NumberRuleSet;
+};
+
+class PatternMatchValidator {
+ public:
+  PatternMatchValidator(CompiledPattern pattern, PatternMatchMode mode)
+      : pattern_(std::move(pattern)), mode_(mode) {}
+
+  Result validate(std::string_view text, Report& report,
+                  std::string_view field, TextOptions options) const noexcept {
+    return pattern_.validate(text, report, field, mode_, options);
+  }
+
+ private:
+  CompiledPattern pattern_;
+  PatternMatchMode mode_;
+};
+
+template <typename... Rules>
+class TextRuleSet {
+ public:
+  TextRuleSet(std::shared_ptr<const std::string> value, TextOptions options)
+      : value_(std::move(value)), options_(options) {}
+
+  auto isNotEmpty() const { return append(RequiredTextValidator{}); }
+  auto isNotBlank() const { return append(NonblankTextValidator{}); }
+  auto hasLength(uint32_t minimum, uint32_t maximum) const {
+    return append(TextLengthValidator{minimum, maximum});
+  }
+  auto hasMaximumBytes(uint32_t maximum_bytes) const {
+    return append(TextByteLimitValidator{maximum_bytes});
+  }
+  auto isEmail() const { return append(EmailValidator{}); }
+  auto matches(const CompiledPattern& pattern,
+               PatternMatchMode mode = PatternMatchMode::Full) const {
+    return append(PatternMatchValidator{pattern, mode});
+  }
+
+  Result validate(Report& report, std::string_view field = {}) const noexcept {
+    if (!report || !value_)
+      return PLAINROOT_VALIDATION_INVALID_ARGUMENT;
+    const std::string_view input(*value_);
+    Result status = PLAINROOT_VALIDATION_OK;
+    std::apply(
+        [&](const auto&... rules) {
+          ((status == PLAINROOT_VALIDATION_OK
+                ? status = rules.validate(input, report, field, options_)
+                : status),
+           ...);
+        },
+        rules_);
+    return status;
+  }
+
+  ValidationResult validate(std::string_view field = {}) const noexcept {
+    Report report;
+    Result status = Report::create(report);
+    if (status == PLAINROOT_VALIDATION_OK)
+      status = validate(report, field);
+    if (report) {
+      const Result seal_status = report.seal();
+      if (status == PLAINROOT_VALIDATION_OK)
+        status = seal_status;
+    }
+    return ValidationResult(status, std::move(report));
+  }
+
+ private:
+  TextRuleSet(std::shared_ptr<const std::string> value, TextOptions options,
+              std::tuple<Rules...> rules)
+      : value_(std::move(value)), options_(options), rules_(std::move(rules)) {}
+
+  template <typename Rule>
+  auto append(Rule rule) const {
+    auto combined = std::tuple_cat(rules_, std::tuple<Rule>{std::move(rule)});
+    return TextRuleSet<Rules..., Rule>(value_, options_, std::move(combined));
+  }
+
+  std::shared_ptr<const std::string> value_;
+  TextOptions options_;
+  std::tuple<Rules...> rules_;
+
+  template <typename...>
+  friend class TextRuleSet;
+};
+
+}  // namespace detail
+
+struct Validators {
+  struct Numbers {
+    template <typename T>
+      requires detail::is_supported_number_v<T>
+    static auto with(T value) {
+      return detail::NumberRuleSet<T>(value);
+    }
+
+    template <typename T>
+      requires detail::is_supported_integer_v<T>
+    static ParseResult<T> parseInteger(std::string_view text,
+                                       ParseOptions options = {}) noexcept {
+      return parse_integer<T>(text, options);
+    }
+
+    template <typename T>
+      requires detail::is_supported_real_v<T>
+    static ParseResult<T> parseReal(std::string_view text,
+                                    ParseOptions options = {}) noexcept {
+      return parse_real<T>(text, options);
+    }
+
+    static ParseResult<bool> parseBoolean(
+        std::string_view text, ParseOptions options = {}) noexcept {
+      return parse_boolean(text, options);
+    }
+  };
+
+  struct Text {
+    static auto with(std::string_view value, TextOptions options = {}) {
+      return detail::TextRuleSet<>(
+          std::make_shared<const std::string>(value), options);
+    }
+  };
 };
 
 }  // namespace plainroot::validation

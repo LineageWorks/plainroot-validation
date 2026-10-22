@@ -88,7 +88,7 @@ near-match input. RE2 avoids catastrophic backtracking.
 **Exit gate:** complete. C and C++ callers use the same text, email, and regex
 behavior through the versioned C API.
 
-### 4. Immutable composition and convenience factories
+### 4. Immutable composition and convenience factories — implemented
 
 - Compose independent validators into immutable rule sets.
 - Provide `Validators::Numbers` and `Validators::Text` convenience factories
@@ -96,9 +96,13 @@ behavior through the versioned C API.
 - Specify accumulation and short-circuit behavior.
 - Support reusable compiled rules without retaining caller-owned input.
 
-**Tests:** composition order, all-independent-errors behavior, dependent-rule
-short-circuiting, rule reuse, immutable configuration, and equivalent results
-through primitive and factory entry points.
+**Verification:** public C++ tests cover declaration-order issue accumulation,
+operation-error short-circuiting, parse-dependent checks, rule reuse, immutable
+builder branches, owned text snapshots, shared compiled patterns, and
+equivalent results through primitive and factory entry points.
+
+**Exit gate:** complete. Numeric and text factories delegate to primitive
+validators and expose both caller-owned reports and a sealed result wrapper.
 
 ### 5. CLI and application command integration
 

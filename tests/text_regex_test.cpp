@@ -16,7 +16,7 @@ using namespace plainroot::validation;
     }                                                                          \
   } while (false)
 
-static_assert(!std::is_copy_constructible_v<CompiledPattern>);
+static_assert(std::is_copy_constructible_v<CompiledPattern>);
 static_assert(std::is_move_constructible_v<CompiledPattern>);
 
 int test_text_rules() {
