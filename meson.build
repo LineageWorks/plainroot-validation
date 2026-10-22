@@ -50,12 +50,19 @@ pkg.generate(
   requires_private: [re2_dep],
 )
 
-executable(
+validation_cli = executable(
   'plainroot-validation-cli',
   'examples/validation_cli.cpp',
   include_directories: public_inc,
   link_with: validation_library,
-  install: false,
+  install: true,
+)
+
+cli_test_script = find_program('tests/validation_cli_test.sh')
+test(
+  'validation-cli',
+  cli_test_script,
+  args: [validation_cli.full_path()],
 )
 
 validation_cpp_test = executable(

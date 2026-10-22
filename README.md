@@ -12,8 +12,10 @@ compiled RE2 patterns. It includes stable issue codes, named typed parameters,
 explicit C handle lifetime, bounded report/input/pattern sizes, inclusive
 numeric ranges, finite-number checks, required and nonblank checks, Unicode
 scalar length, byte limits, and full or partial regex matching. Immutable C++
-rule composition is available through numeric and text factories; the next
-phase demonstrates it in standalone CLI and application commands.
+rule composition is available through numeric and text factories. The
+installable CLI demonstrates typed parsing, range composition, and local
+formatting of structured issues. A separate workspace integration example
+demonstrates validation in an application-owned state update command.
 
 The library installs C and C++ headers and pkg-config metadata. The workspace
 build includes this independent target. A small CLI example shows how a
@@ -37,8 +39,22 @@ meson setup build plainroot-validation
 meson compile -C build
 ```
 
-Run `build/plainroot-validation/plainroot-validation-cli` to see the report
-example.
+Run the CLI with one age value; it accepts the inclusive range 0 through 130:
+
+```sh
+build/plainroot-validation/plainroot-validation-cli ' 42 '
+build/plainroot-validation/plainroot-validation-cli 200
+```
+
+The first command prints `valid profile.age=42`. The second reports an
+`out-of-range` issue and exits with status 2. Malformed input reports its
+stable parse issue code. The CLI is installed as
+`$prefix/bin/plainroot-validation-cli` with the validation library.
+
+`./scripts/workspace.sh test` also builds and runs the separate
+`examples/state-integration` consumer. It links both `plainroot-validation`
+and `plainroot-state`; the validation library's own Meson project has no state
+dependency and remains buildable on its own.
 
 ## C++ report example
 
@@ -112,6 +128,21 @@ share the already-compiled expression. Validation failures accumulate in
 declaration order. An operation error such as an invalid rule configuration
 stops later rules and is returned in `ValidationResult::status()`. Parsing
 remains separate: run value constraints only when the parse result succeeds.
+
+## Validate before a state update
+
+Application commands own the path from raw input to state mutation. Parse text
+first, then use `Store::update()` to stage the typed candidate and validate the
+staged value in the update check callback. Returning
+`PLAINROOT_STATE_REJECTED` discards that draft without changing the store's
+value or revision. The integration example tests both accepted input and a
+range rejection against a pre-existing value.
+
+This is an application command boundary, not a store-wide invariant: code that
+can access the store may still commit a direct transaction. Consumers that
+require validation must route all writes to the relevant values through their
+owned command or service interface. Validation also does not make a value safe
+to embed in shell commands, SQL, HTML, or another output context.
 
 ## Design documents
 

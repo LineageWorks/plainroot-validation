@@ -104,7 +104,7 @@ equivalent results through primitive and factory entry points.
 **Exit gate:** complete. Numeric and text factories delegate to primitive
 validators and expose both caller-owned reports and a sealed result wrapper.
 
-### 5. CLI and application command integration
+### 5. CLI and application command integration — implemented
 
 - Demonstrate typed parsing and composition from a standalone CLI consumer.
 - Document how a command validates a candidate before committing a state
@@ -115,6 +115,15 @@ validators and expose both caller-owned reports and a sealed result wrapper.
 **Tests:** installed CLI consumer and a state-check integration example that
 proves rejection leaves the candidate uncommitted. The validation library
 itself must still build and run without `plainroot-state`.
+
+The CLI accepts one age value, performs locale-independent integer parsing,
+composes an inclusive range check, and formats structured issue codes and
+parameters locally. The separate workspace integration consumer depends on
+both libraries, stages a candidate through `plainroot-state`, and rejects an
+invalid value from the update check callback. Its tests verify that an accepted
+candidate advances the revision, while invalid text and an out-of-range value
+leave the prior value and revision unchanged. The core validation Meson project
+does not discover or require `plainroot-state`.
 
 ### 6. Lua adapter
 

@@ -263,6 +263,13 @@ allowlisted rule names and structured results, not evaluate strings as
 programs. The validator project itself remains Lua-independent; an adapter
 belongs in a consumer or a separate optional integration target.
 
+The separate workspace integration example demonstrates the command flow:
+parse raw text, stage the typed candidate in `Store::update()`, and validate
+the staged draft from its check callback. Returning `PLAINROOT_STATE_REJECTED`
+discards the draft without changing the committed value or revision. The
+example links both libraries, while the validation library's own project
+remains state-independent.
+
 ## Testing contract
 
 Each implementation phase adds tests at the public boundary. Tests should
