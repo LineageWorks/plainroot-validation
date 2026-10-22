@@ -1,48 +1,67 @@
 # plainroot-validation
 
-`plainroot-validation` is planned as an independent library for validating
-typed values and parsing user-provided text. It is intended for graphical
-applications, command-line tools, services, and other consumers.
+`plainroot-validation` is an independent C++ library with a versioned C API
+for reusable input parsing and validation. It does not depend on the UI,
+toolkit, state store, Lua, settings service, or an event loop.
 
-The library will not depend on `plainroot-ui`, `plainroot-toolkit`,
-`plainroot-state`, Lua, or a settings service. Callers may use its results in a
-UI or before a state update, while the validation library itself remains
-usable in a synchronous CLI.
+## Current status
 
-## Project status
+The first implementation provides the shared report foundation: stable issue
+codes, UTF-8 field context, named typed parameters, explicit C handle lifetime,
+and bounded report sizes. Numeric and text validators are the next phase; the
+report API can already be used by custom validation code.
 
-This repository currently contains the design contract and implementation
-roadmap. The public API and build target have not been implemented. The
-roadmap defines the acceptance decisions and staged delivery gates before the
-first ABI is published.
+The library installs C and C++ headers and pkg-config metadata. The workspace
+build includes this independent target. A small CLI example shows how a
+consumer can format issue codes without UI or toolkit dependencies.
+
+## Build
+
+From the `plainroot-desktop` workspace:
+
+```sh
+./scripts/workspace.sh build
+```
+
+Or build the standalone project:
+
+```sh
+meson setup build plainroot-validation
+meson compile -C build
+```
+
+Run `build/plainroot-validation/plainroot-validation-cli` to see the report
+example.
+
+## C++ report example
+
+```cpp
+#include <plainroot/validation/validation.hpp>
+
+plainroot::validation::Report report;
+if (plainroot::validation::Report::create(report) == PLAINROOT_VALIDATION_OK) {
+  plainroot::validation::Issue issue;
+  issue.code = PLAINROOT_VALIDATION_ISSUE_OUT_OF_RANGE;
+  issue.field = "profile.age";
+  issue.parameters = {{"minimum", int64_t{18}}, {"maximum", int64_t{120}}};
+  report.add_issue(issue);
+  report.seal();
+}
+```
+
+Callers own localization and presentation. The library returns machine-readable
+codes and typed parameters, not translated messages. Parsing, validation, and
+normalization are separate operations; validators never silently transform
+input.
 
 ## Design documents
 
 - [Validation contract](docs/validation-contract.md): boundaries, result
-  semantics, parsing, composition, and security requirements.
-- [Implementation roadmap](docs/roadmap.md): ordered phases and acceptance
-  checks.
+  semantics, parsing, Unicode, composition, and security requirements.
+- [Implementation roadmap](docs/roadmap.md): ordered phases and remaining
+  verification.
 - [Project-family roadmap](../plainroot-docs/plainroot-validation-roadmap.md):
-  how the library fits with state, CLI, Lua, and form handling in PlainrootDE.
-
-## Intended API shape
-
-The following examples illustrate the intended C++ API; they are not available
-in this design-stage repository yet:
-
-```cpp
-auto typed = RangeValidator<int>{2, 10}.validate(value);
-auto parsed = Validators::Numbers::parseInteger<int>(text);
-
-auto report = Validators::Text::with(email)
-    .isNotEmpty()
-    .isEmail()
-    .validate();
-```
-
-Typed checks, text parsing, and constraints on parsed values will be separate
-operations. Validation reports will use stable issue codes and parameters;
-applications will choose how to localize and present them.
+  how validation fits with state, CLI, Lua, and form handling in PlainrootDE.
 
 ## License
 

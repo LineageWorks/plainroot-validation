@@ -17,24 +17,24 @@ shell, SQL, HTML, Lua, or other output contexts.
 
 ## Delivery phases
 
-### 0. Settle the contract — current
+### 0. Settle the contract — complete
 
 - Keep parsing, validation, and normalization as separate operations.
 - Define structured reports, issue ordering, maximum result size, and rule
   configuration errors.
 - Define typed numeric range semantics and floating-point handling.
-- Decide UTF-8 validity, human-oriented length units, whitespace behavior,
-  number grammar, and boolean tokens.
-- Select a regex engine and size limits with predictable behavior for
-  untrusted patterns and values.
+- Define UTF-8 validity, human-oriented length units, number grammar, and
+  boolean tokens. Defer Unicode whitespace implementation to phase 3 with a
+  pinned Unicode data version.
+- Defer regex support from the version 1 ABI until a bounded-time engine and
+  dependency policy are selected.
 - Confirm LGPL-3.0-or-later, symbol versioning, ownership, and C/C++ API shape.
 
-**Exit gate:** all marked-open decisions in
-[`validation-contract.md`](validation-contract.md) are either resolved or
-explicitly deferred behind a versioned extension point. No API is frozen while
-its parsing or regex semantics remain ambiguous.
+**Exit gate:** complete. Numeric and boolean parsing semantics are documented;
+regex and Unicode whitespace behavior are explicitly deferred out of the
+initial ABI.
 
-### 1. Standalone project and result foundation
+### 1. Standalone project and result foundation — implemented
 
 - Add the Meson project, shared-library target, symbol version map, installable
   public headers, and pkg-config metadata.
@@ -44,8 +44,9 @@ its parsing or regex semantics remain ambiguous.
 - Add a small CLI example that formats issue codes locally without linking UI
   or toolkit libraries.
 
-**Tests:** C ABI consumer, C++ consumer, report ownership/lifetime, stable issue
-codes, deterministic issue ordering, size limits, and exported-symbol checks.
+**Verification still needed:** C and C++ ABI consumers, report
+ownership/lifetime, stable issue codes, deterministic issue ordering, size
+limits, and exported-symbol checks. This phase has not run a test suite yet.
 
 ### 2. Typed numeric rules and text parsers
 

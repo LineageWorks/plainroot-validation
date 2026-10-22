@@ -1,8 +1,8 @@
 # Validation Contract
 
-This document defines the intended behavior of `plainroot-validation` before
-its public API is implemented. A decision marked **Open** must be resolved and
-recorded before it becomes part of the versioned ABI.
+This document defines the behavior of `plainroot-validation`. Decisions that
+are deferred are kept out of the initial versioned ABI until their semantics
+are settled.
 
 ## Purpose and boundaries
 
@@ -92,14 +92,23 @@ and syntax that is not accepted by the selected parser mode.
 
 The default parser should be locale-independent. Localized digits and decimal
 separators require an explicit parser policy and must not depend on process
-locale. The exact accepted grammar, whitespace handling, exponent behavior,
-and localized-input policy are **Open** decisions for the foundation phase.
+locale. Version one uses an ASCII grammar. Signed and unsigned integers accept
+an optional leading `+`; signed integers also accept `-`, while unsigned
+integers reject it. A real number accepts an optional sign, decimal digits with
+an optional decimal point, and an optional `e` or `E` exponent with an optional
+sign. At least one mantissa digit and, when present, at least one exponent
+digit are required. Hexadecimal notation, digit separators, `NaN`, and
+infinities are rejected. The parser consumes the entire input. It does not
+trim whitespace unless a later parser option explicitly requests it. Decimal
+separators and localized digits are never inferred from the process locale.
+Representable subnormal floating-point values are accepted. A nonzero value
+that underflows outside the target type's representable range is a parse error,
+as is overflow.
 
-Boolean text parsing must use an explicit set of accepted tokens and a
-documented case policy. The default token set should be small and predictable;
-aliases such as `yes/no` or `1/0` should require an explicit option. Parsing
-returns the parsed boolean so callers need not validate against one expected
-value just to convert the text.
+Boolean text parsing accepts exactly lowercase ASCII `true` and `false` by
+default. Matching is case-sensitive. Aliases such as `yes/no` or `1/0` require
+an explicit option. Parsing returns the parsed boolean so callers need not
+validate against one expected value just to convert the text.
 
 ## Text validation and Unicode
 
@@ -112,11 +121,13 @@ recommended initial length unit is Unicode scalar values, with byte limits as
 a separate safety bound. Grapheme-cluster counting requires a Unicode data
 dependency and is deferred until a real consumer establishes that need.
 
-Required text and nonblank text should be separate rules. The precise Unicode
-whitespace definition for nonblank input is an **Open** implementation choice.
-Email validation should be documented as syntax screening only; it cannot
-prove mailbox existence or delivery. Internationalized email support and its
-normalization rules are also **Open** decisions.
+Required text and nonblank text are separate rules. Nonblank text will use the
+Unicode `White_Space` property from a documented Unicode data version; that
+rule is deferred until the text-rules phase. Human-oriented length counts
+Unicode scalar values, not grapheme clusters, and performs no normalization.
+Email validation is syntax screening only; it cannot prove mailbox existence
+or delivery. Version one email syntax is ASCII-only. Internationalized email
+support and normalization are deferred.
 
 ## Regular expressions and untrusted input
 
@@ -127,7 +138,9 @@ Invalid patterns produce a rule-construction error. Regex matching must have
 explicit pattern and input size limits. Before publishing a regex API, choose
 and document an engine and its worst-case behavior. Do not expose an
 unbounded-backtracking engine to patterns or inputs that may be untrusted.
-This engine choice is an **Open** decision for the foundation phase.
+Regex support is deferred from the initial ABI until a bounded-time engine and
+its build-time dependency policy are selected. No `std::regex` or other
+unbounded-backtracking API will be published in version one.
 
 Validation does not replace parameterized SQL, safe process APIs, HTML
 escaping, or context-specific output encoding. Passing a validator does not
@@ -178,6 +191,18 @@ may cross the C ABI. Public headers must not expose backend or UI types.
 The standalone Meson package should install its headers and pkg-config
 metadata. Keep runtime dependencies small. A third-party regex or Unicode
 dependency must have a documented reason and build-time detection policy.
+
+The first ABI version provides a bounded, explicitly sealed report builder.
+Reports contain stable issue codes, optional UTF-8 field paths, and named
+typed parameters. Field paths and parameter names are UTF-8 without U+0000;
+text parameter values are UTF-8 and may contain U+0000. Report issues are
+appended in declaration order. Report mutation is single-owner and must not
+race with reads; once sealed, a report can be shared for concurrent reads. C
+handles are explicitly retained and released. An add operation either appends
+the complete issue or leaves the report unchanged. Defaults are 64 issues, 8
+parameters per issue, and 1 MiB of aggregate field/name/text bytes. Hard limits
+are 256 issues, 16 parameters per issue, and 16 MiB of aggregate text bytes;
+callers may lower limits when creating a report.
 
 ## State, forms, and Lua
 

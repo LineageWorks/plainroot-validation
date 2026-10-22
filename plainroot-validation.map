@@ -1,0 +1,6 @@
+PLAINROOT_VALIDATION_0.1 {
+  global:
+    plainroot_validation_*;
+  local:
+    *;
+};
