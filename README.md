@@ -6,10 +6,11 @@ toolkit, state store, Lua, settings service, or an event loop.
 
 ## Current status
 
-The first implementation provides the shared report foundation: stable issue
-codes, UTF-8 field context, named typed parameters, explicit C handle lifetime,
-and bounded report sizes. Numeric and text validators are the next phase; the
-report API can already be used by custom validation code.
+The implementation provides the shared report foundation and typed numeric
+rules: stable issue codes, UTF-8 field context, named typed parameters,
+explicit C handle lifetime, bounded report sizes, inclusive integer and real
+ranges, finite-number checks, and locale-independent numeric and boolean text
+parsers. Text rules and composable validator factories are the next phases.
 
 The library installs C and C++ headers and pkg-config metadata. The workspace
 build includes this independent target. A small CLI example shows how a
@@ -53,6 +54,27 @@ Callers own localization and presentation. The library returns machine-readable
 codes and typed parameters, not translated messages. Parsing, validation, and
 normalization are separate operations; validators never silently transform
 input.
+
+## Numeric parsing example
+
+```cpp
+using namespace plainroot::validation;
+
+ParseOptions options;
+options.trim_ascii_whitespace = true;
+const auto age = parse_integer<int>(" 42 ", options);
+if (age) {
+  Report report;
+  if (Report::create(report) == PLAINROOT_VALIDATION_OK) {
+    RangeValidator<int>{0, 130}.validate(age.value, report, "profile.age");
+    report.seal();
+  }
+}
+```
+
+Parsers use ASCII syntax independent of process locale. They do not trim
+whitespace unless explicitly enabled. Boolean aliases and case-insensitive
+matching are opt-in through `ParseOptions`.
 
 ## Design documents
 

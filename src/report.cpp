@@ -1,5 +1,8 @@
 #include <plainroot/validation/validation.h>
 
+#include "text_utils.hpp"
+#include "report_internal.hpp"
+
 #include <atomic>
 #include <cmath>
 #include <cstddef>
@@ -48,55 +51,9 @@ bool checked_add(uint64_t left, uint64_t right, uint64_t& result) noexcept {
   return true;
 }
 
-bool valid_utf8(const char *data, size_t size, bool reject_nul) noexcept {
-  if (size && !data)
-    return false;
-  const auto *bytes = reinterpret_cast<const unsigned char *>(data);
-  size_t i = 0;
-  while (i < size) {
-    const unsigned char first = bytes[i];
-    if (first <= 0x7f) {
-      if (reject_nul && first == 0)
-        return false;
-      ++i;
-      continue;
-    }
-
-    uint32_t codepoint = 0;
-    size_t length = 0;
-    if (first >= 0xc2 && first <= 0xdf) {
-      codepoint = first & 0x1f;
-      length = 2;
-    } else if (first >= 0xe0 && first <= 0xef) {
-      codepoint = first & 0x0f;
-      length = 3;
-    } else if (first >= 0xf0 && first <= 0xf4) {
-      codepoint = first & 0x07;
-      length = 4;
-    } else {
-      return false;
-    }
-    if (length > size - i)
-      return false;
-    for (size_t j = 1; j < length; ++j) {
-      const unsigned char continuation = bytes[i + j];
-      if ((continuation & 0xc0) != 0x80)
-        return false;
-      codepoint = (codepoint << 6) | (continuation & 0x3f);
-    }
-    if ((length == 3 && codepoint < 0x800) ||
-        (length == 4 && codepoint < 0x10000) ||
-        (codepoint >= 0xd800 && codepoint <= 0xdfff) ||
-        codepoint > 0x10ffff)
-      return false;
-    i += length;
-  }
-  return true;
-}
-
 bool known_issue_code(plainroot_validation_issue_code_v1 code) noexcept {
   return code >= PLAINROOT_VALIDATION_ISSUE_REQUIRED &&
-         code <= PLAINROOT_VALIDATION_ISSUE_INVALID_EMAIL;
+         code <= PLAINROOT_VALIDATION_ISSUE_NON_FINITE_NUMBER;
 }
 
 bool known_parameter_type(
@@ -144,7 +101,8 @@ plainroot_validation_result_v1 add_parameter(
     return PLAINROOT_VALIDATION_INVALID_ARGUMENT;
   if (!known_parameter_type(input.type))
     return PLAINROOT_VALIDATION_INVALID_ARGUMENT;
-  if (!valid_utf8(input.name, input.name_size, true))
+  if (!plainroot_validation_detail::valid_utf8(input.name, input.name_size,
+                                                true))
     return PLAINROOT_VALIDATION_INVALID_UTF8;
 
   uint64_t next_bytes = 0;
@@ -174,7 +132,8 @@ plainroot_validation_result_v1 add_parameter(
     case PLAINROOT_VALIDATION_PARAMETER_TEXT:
       if (input.as.text.size && !input.as.text.data)
         return PLAINROOT_VALIDATION_INVALID_ARGUMENT;
-      if (!valid_utf8(input.as.text.data, input.as.text.size, false))
+      if (!plainroot_validation_detail::valid_utf8(
+              input.as.text.data, input.as.text.size, false))
         return PLAINROOT_VALIDATION_INVALID_UTF8;
       if (!checked_add(text_bytes, input.as.text.size, next_bytes))
         return PLAINROOT_VALIDATION_LIMIT_EXCEEDED;
@@ -195,6 +154,17 @@ struct plainroot_validation_report {
   bool sealed = false;
   std::vector<IssueData> issues;
 };
+
+namespace plainroot_validation_detail {
+
+plainroot_validation_result_v1 require_open_report(
+    const plainroot_validation_report *report) noexcept {
+  if (!report)
+    return PLAINROOT_VALIDATION_INVALID_ARGUMENT;
+  return report->sealed ? PLAINROOT_VALIDATION_SEALED : PLAINROOT_VALIDATION_OK;
+}
+
+}  // namespace plainroot_validation_detail
 
 extern "C" {
 
@@ -234,6 +204,8 @@ const char *plainroot_validation_result_name_v1(
 const char *plainroot_validation_issue_code_name_v1(
     plainroot_validation_issue_code_v1 issue_code) {
   switch (issue_code) {
+    case PLAINROOT_VALIDATION_ISSUE_NONE:
+      return "none";
     case PLAINROOT_VALIDATION_ISSUE_REQUIRED:
       return "required";
     case PLAINROOT_VALIDATION_ISSUE_INVALID_UTF8:
@@ -256,6 +228,8 @@ const char *plainroot_validation_issue_code_name_v1(
       return "pattern-mismatch";
     case PLAINROOT_VALIDATION_ISSUE_INVALID_EMAIL:
       return "invalid-email";
+    case PLAINROOT_VALIDATION_ISSUE_NON_FINITE_NUMBER:
+      return "non-finite-number";
   }
   return "unknown-issue";
 }
@@ -330,7 +304,8 @@ plainroot_validation_result_v1 plainroot_validation_report_add_issue_v1(
     IssueData copied;
     copied.code = issue->code;
     if (issue->field_size) {
-      if (!valid_utf8(issue->field, issue->field_size, true))
+      if (!plainroot_validation_detail::valid_utf8(
+              issue->field, issue->field_size, true))
         return PLAINROOT_VALIDATION_INVALID_UTF8;
       copied.field.assign(issue->field, issue->field_size);
     }

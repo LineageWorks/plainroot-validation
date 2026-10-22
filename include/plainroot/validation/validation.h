@@ -16,6 +16,8 @@ extern "C" {
 #define PLAINROOT_VALIDATION_MAXIMUM_PARAMETERS_PER_ISSUE 16u
 #define PLAINROOT_VALIDATION_DEFAULT_MAXIMUM_TEXT_BYTES (1024u * 1024u)
 #define PLAINROOT_VALIDATION_MAXIMUM_TEXT_BYTES (16u * 1024u * 1024u)
+#define PLAINROOT_VALIDATION_DEFAULT_MAXIMUM_INPUT_BYTES (64u * 1024u)
+#define PLAINROOT_VALIDATION_MAXIMUM_INPUT_BYTES (1024u * 1024u)
 
 typedef enum plainroot_validation_result_v1 {
   PLAINROOT_VALIDATION_OK = 0,
@@ -33,6 +35,7 @@ typedef enum plainroot_validation_result_v1 {
 } plainroot_validation_result_v1;
 
 typedef enum plainroot_validation_issue_code_v1 {
+  PLAINROOT_VALIDATION_ISSUE_NONE = 0,
   PLAINROOT_VALIDATION_ISSUE_REQUIRED = 1,
   PLAINROOT_VALIDATION_ISSUE_INVALID_UTF8 = 2,
   PLAINROOT_VALIDATION_ISSUE_OUT_OF_RANGE = 3,
@@ -44,6 +47,7 @@ typedef enum plainroot_validation_issue_code_v1 {
   PLAINROOT_VALIDATION_ISSUE_TOO_LONG = 9,
   PLAINROOT_VALIDATION_ISSUE_PATTERN_MISMATCH = 10,
   PLAINROOT_VALIDATION_ISSUE_INVALID_EMAIL = 11,
+  PLAINROOT_VALIDATION_ISSUE_NON_FINITE_NUMBER = 12,
 } plainroot_validation_issue_code_v1;
 
 typedef enum plainroot_validation_parameter_type_v1 {
@@ -116,6 +120,45 @@ typedef struct plainroot_validation_issue_view_v1 {
 
 typedef struct plainroot_validation_report plainroot_validation_report;
 
+typedef struct plainroot_validation_parse_options_v1 {
+  uint32_t struct_size;
+  /* Zero selects the documented default. */
+  uint32_t maximum_input_bytes;
+  uint8_t trim_ascii_whitespace;
+  uint8_t boolean_case_insensitive_ascii;
+  uint8_t boolean_accept_yes_no;
+  uint8_t boolean_accept_0_1;
+} plainroot_validation_parse_options_v1;
+
+typedef struct plainroot_validation_parse_i64_result_v1 {
+  uint32_t struct_size;
+  uint8_t parsed;
+  int64_t value;
+  /* NONE on success; otherwise describes invalid user input. */
+  plainroot_validation_issue_code_v1 failure_code;
+} plainroot_validation_parse_i64_result_v1;
+
+typedef struct plainroot_validation_parse_u64_result_v1 {
+  uint32_t struct_size;
+  uint8_t parsed;
+  uint64_t value;
+  plainroot_validation_issue_code_v1 failure_code;
+} plainroot_validation_parse_u64_result_v1;
+
+typedef struct plainroot_validation_parse_f64_result_v1 {
+  uint32_t struct_size;
+  uint8_t parsed;
+  double value;
+  plainroot_validation_issue_code_v1 failure_code;
+} plainroot_validation_parse_f64_result_v1;
+
+typedef struct plainroot_validation_parse_bool_result_v1 {
+  uint32_t struct_size;
+  uint8_t parsed;
+  uint8_t value;
+  plainroot_validation_issue_code_v1 failure_code;
+} plainroot_validation_parse_bool_result_v1;
+
 PLAINROOT_VALIDATION_API uint32_t
 plainroot_validation_abi_version_v1(void);
 PLAINROOT_VALIDATION_API const char *
@@ -123,6 +166,50 @@ plainroot_validation_result_name_v1(plainroot_validation_result_v1 result);
 PLAINROOT_VALIDATION_API const char *
 plainroot_validation_issue_code_name_v1(
     plainroot_validation_issue_code_v1 issue_code);
+
+/* These checks append an issue when the value is invalid, and return OK when
+ * the check itself ran successfully. Range bounds are inclusive. Bounds are
+ * rule data; invalid bounds return INVALID_RULE without changing the report. */
+PLAINROOT_VALIDATION_API plainroot_validation_result_v1
+plainroot_validation_validate_range_i64_v1(
+    plainroot_validation_report *report, const char *field, size_t field_size,
+    int64_t value, int64_t minimum, int64_t maximum);
+PLAINROOT_VALIDATION_API plainroot_validation_result_v1
+plainroot_validation_validate_range_u64_v1(
+    plainroot_validation_report *report, const char *field, size_t field_size,
+    uint64_t value, uint64_t minimum, uint64_t maximum);
+PLAINROOT_VALIDATION_API plainroot_validation_result_v1
+plainroot_validation_validate_range_f64_v1(
+    plainroot_validation_report *report, const char *field, size_t field_size,
+    double value, double minimum, double maximum);
+PLAINROOT_VALIDATION_API plainroot_validation_result_v1
+plainroot_validation_validate_finite_f64_v1(
+    plainroot_validation_report *report, const char *field, size_t field_size,
+    double value);
+
+/* Parsers are locale-independent. On malformed/out-of-range text they return
+ * OK with parsed=0 and a failure_code; on operational errors they return an
+ * error status. Result value is zeroed whenever parsing fails. */
+PLAINROOT_VALIDATION_API plainroot_validation_result_v1
+plainroot_validation_parse_i64_text_v1(
+    const char *text, size_t text_size,
+    const plainroot_validation_parse_options_v1 *options,
+    plainroot_validation_parse_i64_result_v1 *output);
+PLAINROOT_VALIDATION_API plainroot_validation_result_v1
+plainroot_validation_parse_u64_text_v1(
+    const char *text, size_t text_size,
+    const plainroot_validation_parse_options_v1 *options,
+    plainroot_validation_parse_u64_result_v1 *output);
+PLAINROOT_VALIDATION_API plainroot_validation_result_v1
+plainroot_validation_parse_f64_text_v1(
+    const char *text, size_t text_size,
+    const plainroot_validation_parse_options_v1 *options,
+    plainroot_validation_parse_f64_result_v1 *output);
+PLAINROOT_VALIDATION_API plainroot_validation_result_v1
+plainroot_validation_parse_bool_text_v1(
+    const char *text, size_t text_size,
+    const plainroot_validation_parse_options_v1 *options,
+    plainroot_validation_parse_bool_result_v1 *output);
 
 /* Zero option fields select defaults. Unknown future option fields are
  * ignored according to struct_size. The output handle is owned by the caller. */

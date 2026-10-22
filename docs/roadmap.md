@@ -44,11 +44,11 @@ initial ABI.
 - Add a small CLI example that formats issue codes locally without linking UI
   or toolkit libraries.
 
-**Verification still needed:** C and C++ ABI consumers, report
-ownership/lifetime, stable issue codes, deterministic issue ordering, size
-limits, and exported-symbol checks. This phase has not run a test suite yet.
+**Verification:** C and C++ public-boundary tests exercise report ownership,
+issue ordering, stable codes, configured limits, and numeric behavior.
+Dedicated ABI and exported-symbol checks remain part of phase 7.
 
-### 2. Typed numeric rules and text parsers
+### 2. Typed numeric rules and text parsers — implemented
 
 - Implement templated inclusive ranges for signed/unsigned integer and
   floating-point values.
@@ -58,9 +58,19 @@ limits, and exported-symbol checks. This phase has not run a test suite yet.
 - Keep parse failures distinct from range failures and return the parsed value
   only on successful conversion.
 
-**Tests:** minimum/maximum boundaries, inverted bounds, zero, negative and
-unsigned inputs, overflow, malformed syntax, trailing characters, exponent
-policy, NaN/infinity, and every configured boolean token.
+Inclusive signed, unsigned, and floating-point range validators, finite-number
+checks, and fixed-width C parsers are implemented. The C++ wrapper supports
+standard integer types through 64 value bits and `float`/`double`; it checks
+narrow-target conversion ranges after the fixed-width parser succeeds.
+
+**Tests:** minimum/maximum boundaries, inverted bounds, negative and unsigned
+inputs, narrow and fixed-width overflow, malformed syntax, trailing
+characters, decimal exponent forms, NaN/infinity rejection, subnormal and
+underflow behavior, ASCII whitespace options, input-size limits, invalid UTF-8,
+and all configured boolean tokens are covered through C and C++ callers.
+
+**Exit gate:** complete. The public C and C++ parser and numeric-rule APIs
+build and pass their dedicated test executables.
 
 ### 3. Text rules and regex policy
 

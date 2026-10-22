@@ -70,14 +70,15 @@ an inverted range, an invalid regex pattern, or conflicting builder options.
 
 ## Typed numeric validation
 
-Numeric validators should use C++ templates constrained to numeric types.
-Boolean and character types must not be accepted as ordinary numeric types.
-Version one should cover standard signed and unsigned integers and floating
-point types, with a fixed-width C interface underneath the C++ templates.
+Numeric validators use C++ templates constrained to standard signed and
+unsigned integer types up to 64 value bits, plus `float` and `double`. Boolean
+and character code-unit types are not accepted as ordinary numeric types. The
+versioned C interface uses `int64_t`, `uint64_t`, and `double` underneath the
+C++ templates.
 
-Range bounds are inclusive by default. The caller must be able to request
-exclusive bounds explicitly if a consumer needs them. A range whose minimum is
-greater than its maximum is a rule-construction error.
+Version one provides inclusive range bounds. Exclusive bounds can be added
+after a consumer establishes the need. A range whose minimum is greater than
+its maximum is a rule-construction error.
 
 Typed floating-point validation rejects NaN and infinities. Numeric limits and
 comparisons must avoid overflow and undefined conversions. A finite-number
@@ -99,16 +100,25 @@ an optional decimal point, and an optional `e` or `E` exponent with an optional
 sign. At least one mantissa digit and, when present, at least one exponent
 digit are required. Hexadecimal notation, digit separators, `NaN`, and
 infinities are rejected. The parser consumes the entire input. It does not
-trim whitespace unless a later parser option explicitly requests it. Decimal
-separators and localized digits are never inferred from the process locale.
-Representable subnormal floating-point values are accepted. A nonzero value
-that underflows outside the target type's representable range is a parse error,
-as is overflow.
+trim whitespace by default; the caller may explicitly enable ASCII whitespace
+trimming. Numeric text input is limited to 64 KiB by default and 1 MiB at most,
+with a lower per-call limit available. Decimal separators and localized digits
+are never inferred from the process locale. Representable subnormal
+floating-point values are accepted. A nonzero value that underflows outside
+the target type's representable range is a parse error, as is overflow.
 
 Boolean text parsing accepts exactly lowercase ASCII `true` and `false` by
-default. Matching is case-sensitive. Aliases such as `yes/no` or `1/0` require
-an explicit option. Parsing returns the parsed boolean so callers need not
-validate against one expected value just to convert the text.
+default. Matching is case-sensitive. Options can independently enable
+ASCII-case-insensitive matching, `yes/no`, and `1/0` aliases. Parsing returns
+the parsed boolean so callers need not validate against one expected value
+just to convert the text.
+
+The C parser APIs return an operation status separately from the parse result.
+Malformed text and values outside the target type return `OK`, set `parsed` to
+false, and provide a stable `failure_code`; the output value is zeroed. Invalid
+options, null pointers paired with nonzero lengths, and input-size violations
+return an operation error. The C++ `ParseResult<T>` preserves these two layers
+as `result` and `parsed`.
 
 ## Text validation and Unicode
 

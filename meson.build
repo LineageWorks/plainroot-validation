@@ -17,6 +17,7 @@ public_inc = include_directories('include')
 validation_library = library(
   'plainroot-validation',
   'src/report.cpp',
+  'src/numeric.cpp',
   include_directories: public_inc,
   cpp_args: ['-DPLAINROOT_VALIDATION_BUILD', '-fvisibility-inlines-hidden'],
   gnu_symbol_visibility: 'hidden',
@@ -51,3 +52,21 @@ executable(
   link_with: validation_library,
   install: false,
 )
+
+validation_cpp_test = executable(
+  'plainroot-validation-cpp-test',
+  'tests/numeric_test.cpp',
+  include_directories: public_inc,
+  link_with: validation_library,
+  install: false,
+)
+test('validation-cpp', validation_cpp_test)
+
+validation_c_api_test = executable(
+  'plainroot-validation-c-api-test',
+  'tests/c_api_test.c',
+  include_directories: public_inc,
+  link_with: validation_library,
+  install: false,
+)
+test('validation-c-api', validation_c_api_test)

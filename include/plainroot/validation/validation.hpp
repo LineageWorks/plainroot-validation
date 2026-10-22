@@ -5,6 +5,8 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cmath>
+#include <limits>
 #include <new>
 #include <string>
 #include <string_view>
@@ -35,6 +37,69 @@ struct ReportOptions {
   uint32_t maximum_parameters_per_issue = 0;
   uint64_t maximum_text_bytes = 0;
 };
+
+struct ParseOptions {
+  uint32_t maximum_input_bytes = 0;
+  bool trim_ascii_whitespace = false;
+  bool boolean_case_insensitive_ascii = false;
+  bool boolean_accept_yes_no = false;
+  bool boolean_accept_0_1 = false;
+};
+
+template <typename T>
+struct ParseResult {
+  Result result = PLAINROOT_VALIDATION_OK;
+  bool parsed = false;
+  T value{};
+  IssueCode failure_code = PLAINROOT_VALIDATION_ISSUE_NONE;
+
+  explicit operator bool() const noexcept {
+    return result == PLAINROOT_VALIDATION_OK && parsed;
+  }
+};
+
+namespace detail {
+
+template <typename T>
+inline constexpr bool is_character_code_unit_v =
+    std::is_same_v<std::remove_cv_t<T>, char> ||
+    std::is_same_v<std::remove_cv_t<T>, wchar_t> ||
+#if defined(__cpp_char8_t)
+    std::is_same_v<std::remove_cv_t<T>, char8_t> ||
+#endif
+    std::is_same_v<std::remove_cv_t<T>, char16_t> ||
+    std::is_same_v<std::remove_cv_t<T>, char32_t>;
+
+template <typename T>
+inline constexpr bool is_supported_integer_v =
+    std::is_integral_v<T> && !std::is_same_v<std::remove_cv_t<T>, bool> &&
+    !is_character_code_unit_v<T> && std::numeric_limits<T>::digits <= 64;
+
+template <typename T>
+inline constexpr bool is_supported_real_v =
+    std::is_same_v<std::remove_cv_t<T>, float> ||
+    std::is_same_v<std::remove_cv_t<T>, double>;
+
+template <typename T>
+inline constexpr bool is_supported_number_v =
+    is_supported_integer_v<T> || is_supported_real_v<T>;
+
+inline plainroot_validation_parse_options_v1 native_parse_options(
+    const ParseOptions& options) noexcept {
+  plainroot_validation_parse_options_v1 native{};
+  native.struct_size = sizeof(native);
+  native.maximum_input_bytes = options.maximum_input_bytes;
+  native.trim_ascii_whitespace = options.trim_ascii_whitespace ? 1 : 0;
+  native.boolean_case_insensitive_ascii =
+      options.boolean_case_insensitive_ascii ? 1 : 0;
+  native.boolean_accept_yes_no = options.boolean_accept_yes_no ? 1 : 0;
+  native.boolean_accept_0_1 = options.boolean_accept_0_1 ? 1 : 0;
+  return native;
+}
+
+struct ReportAccess;
+
+}  // namespace detail
 
 inline std::string_view result_name(Result result) noexcept {
   const char *name = plainroot_validation_result_name_v1(result);
@@ -237,6 +302,159 @@ class Report {
  private:
   plainroot_validation_report *handle_ = nullptr;
   bool sealed_ = false;
+  friend struct detail::ReportAccess;
+};
+
+namespace detail {
+
+struct ReportAccess {
+  static plainroot_validation_report *get(Report& report) noexcept {
+    return report.handle_;
+  }
+};
+
+}  // namespace detail
+
+template <typename T>
+  requires detail::is_supported_integer_v<T>
+ParseResult<T> parse_integer(std::string_view text,
+                             ParseOptions options = {}) noexcept {
+  ParseResult<T> output;
+  const auto native_options = detail::native_parse_options(options);
+  if constexpr (std::is_signed_v<T>) {
+    plainroot_validation_parse_i64_result_v1 parsed{};
+    parsed.struct_size = sizeof(parsed);
+    output.result = plainroot_validation_parse_i64_text_v1(
+        text.data(), text.size(), &native_options, &parsed);
+    if (output.result != PLAINROOT_VALIDATION_OK)
+      return output;
+    output.failure_code = parsed.failure_code;
+    if (!parsed.parsed)
+      return output;
+    const int64_t minimum =
+        static_cast<int64_t>(std::numeric_limits<T>::min());
+    const int64_t maximum =
+        static_cast<int64_t>(std::numeric_limits<T>::max());
+    if (parsed.value < minimum || parsed.value > maximum) {
+      output.failure_code = PLAINROOT_VALIDATION_ISSUE_OUT_OF_RANGE;
+      return output;
+    }
+    output.value = static_cast<T>(parsed.value);
+  } else {
+    plainroot_validation_parse_u64_result_v1 parsed{};
+    parsed.struct_size = sizeof(parsed);
+    output.result = plainroot_validation_parse_u64_text_v1(
+        text.data(), text.size(), &native_options, &parsed);
+    if (output.result != PLAINROOT_VALIDATION_OK)
+      return output;
+    output.failure_code = parsed.failure_code;
+    if (!parsed.parsed)
+      return output;
+    const uint64_t maximum =
+        static_cast<uint64_t>(std::numeric_limits<T>::max());
+    if (parsed.value > maximum) {
+      output.failure_code = PLAINROOT_VALIDATION_ISSUE_OUT_OF_RANGE;
+      return output;
+    }
+    output.value = static_cast<T>(parsed.value);
+  }
+  output.parsed = true;
+  output.failure_code = PLAINROOT_VALIDATION_ISSUE_NONE;
+  return output;
+}
+
+template <typename T>
+  requires detail::is_supported_real_v<T>
+ParseResult<T> parse_real(std::string_view text,
+                          ParseOptions options = {}) noexcept {
+  ParseResult<T> output;
+  const auto native_options = detail::native_parse_options(options);
+  plainroot_validation_parse_f64_result_v1 parsed{};
+  parsed.struct_size = sizeof(parsed);
+  output.result = plainroot_validation_parse_f64_text_v1(
+      text.data(), text.size(), &native_options, &parsed);
+  if (output.result != PLAINROOT_VALIDATION_OK)
+    return output;
+  output.failure_code = parsed.failure_code;
+  if (!parsed.parsed)
+    return output;
+
+  const T converted = static_cast<T>(parsed.value);
+  if (!std::isfinite(converted) ||
+      (parsed.value != 0.0 && converted == static_cast<T>(0))) {
+    output.failure_code = PLAINROOT_VALIDATION_ISSUE_OUT_OF_RANGE;
+    return output;
+  }
+  output.value = converted;
+  output.parsed = true;
+  output.failure_code = PLAINROOT_VALIDATION_ISSUE_NONE;
+  return output;
+}
+
+inline ParseResult<bool> parse_boolean(std::string_view text,
+                                       ParseOptions options = {}) noexcept {
+  ParseResult<bool> output;
+  const auto native_options = detail::native_parse_options(options);
+  plainroot_validation_parse_bool_result_v1 parsed{};
+  parsed.struct_size = sizeof(parsed);
+  output.result = plainroot_validation_parse_bool_text_v1(
+      text.data(), text.size(), &native_options, &parsed);
+  if (output.result == PLAINROOT_VALIDATION_OK) {
+    output.parsed = parsed.parsed != 0;
+    output.value = parsed.value != 0;
+    output.failure_code = parsed.failure_code;
+  }
+  return output;
+}
+
+template <typename T>
+  requires detail::is_supported_number_v<T>
+class RangeValidator {
+ public:
+  RangeValidator(T minimum, T maximum) noexcept
+      : minimum_(minimum), maximum_(maximum) {}
+
+  Result validate(T value, Report& report,
+                  std::string_view field = {}) const noexcept {
+    auto *native_report = detail::ReportAccess::get(report);
+    if (!native_report)
+      return PLAINROOT_VALIDATION_INVALID_ARGUMENT;
+    if constexpr (detail::is_supported_integer_v<T>) {
+      if constexpr (std::is_signed_v<T>) {
+        return plainroot_validation_validate_range_i64_v1(
+            native_report, field.data(), field.size(),
+            static_cast<int64_t>(value), static_cast<int64_t>(minimum_),
+            static_cast<int64_t>(maximum_));
+      } else {
+        return plainroot_validation_validate_range_u64_v1(
+            native_report, field.data(), field.size(),
+            static_cast<uint64_t>(value), static_cast<uint64_t>(minimum_),
+            static_cast<uint64_t>(maximum_));
+      }
+    } else {
+      return plainroot_validation_validate_range_f64_v1(
+          native_report, field.data(), field.size(), static_cast<double>(value),
+          static_cast<double>(minimum_), static_cast<double>(maximum_));
+    }
+  }
+
+ private:
+  T minimum_;
+  T maximum_;
+};
+
+template <typename T>
+  requires detail::is_supported_real_v<T>
+class FiniteNumberValidator {
+ public:
+  Result validate(T value, Report& report,
+                  std::string_view field = {}) const noexcept {
+    auto *native_report = detail::ReportAccess::get(report);
+    if (!native_report)
+      return PLAINROOT_VALIDATION_INVALID_ARGUMENT;
+    return plainroot_validation_validate_finite_f64_v1(
+        native_report, field.data(), field.size(), static_cast<double>(value));
+  }
 };
 
 }  // namespace plainroot::validation
